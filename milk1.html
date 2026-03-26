@@ -7638,121 +7638,85 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
 }
 // --- 唯一、统一的页面初始化逻辑 ---
 // --- 强化版：全能初始化与场景恢复系统 ---
-window.addEventListener("load", async () => {
-  
-    
 
+window.addEventListener("load", async () => {
+    // 1. 基础 UI 缩放（第一优先级，防止闪烁）
     setScale();
 
-
-        // --- 【校准后的提取逻辑】 ---
-        try {
-        // 使用 TavernHelper 接口获取从 0 到最新的所有消息
-        // getChatMessages('0-{{lastMessageId}}') 是最稳妥的获取全量消息的方法
+    // 2. 从 AI 最新消息提取剧情数据（你的核心要求）
+    try {
         const allMessages = TavernHelper.getChatMessages('0-{{lastMessageId}}');
-
         if (allMessages && allMessages.length > 0) {
-            // 从后往前找，找到第一条 role 为 'assistant' (AI) 的消息
             const lastAiMsg = [...allMessages].reverse().find(m => m.role === 'assistant');
-            
             if (lastAiMsg && lastAiMsg.message) {
-                // 使用你提供的正则进行捕获
                 const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/;
                 const match = lastAiMsg.message.match(regex);
-                
                 if (match && match[1]) {
                     try {
                         const parsed = JSON.parse(match[1].trim());
                         if (Array.isArray(parsed)) {
                             dialogData = parsed;
-                            console.log("✅ 成功从 TavernHelper 提取剧情数据:", dialogData);
+                            console.log("✅ 剧情数据提取成功:", dialogData);
                         }
-                    } catch (jsonErr) {
-                        console.warn("⚠️ 捕获到了标签但 JSON 格式解析失败:", jsonErr);
-                    }
+                    } catch (e) { console.warn("AI剧情JSON解析失败"); }
                 }
             }
         }
-    } catch (e) {
-        console.error("❌ 获取聊天记录失败:", e);
-    }
-    let liveMvuData = null;
+    } catch (e) { console.error("消息读取异常", e); }
 
-    // 1. 同步云端数据到本地变量
+    // 3. 数据云端同步 (MVU)
     try {
         await waitGlobalInitialized("Mvu");
-        liveMvuData = Mvu.getMvuData({ type: "message", message_id: getCurrentMessageId() });
-
+        const liveMvuData = Mvu.getMvuData({ type: "message", message_id: getCurrentMessageId() });
         if (liveMvuData && liveMvuData.stat_data) {
             const sd = liveMvuData.stat_data;
-            // 同步基础数据库
             if (sd.appSettings) appSettings = sd.appSettings;
             if (sd.shopConfig) shopConfig = sd.shopConfig;
             if (sd.shopFinancials) shopFinancials = sd.shopFinancials;
             if (sd.shopMenu) shopMenu = sd.shopMenu;
+            if (sd.unlockedIngredients) unlockedIngredients = sd.unlockedIngredients;
             if (sd.customersDB) customersDB = sd.customersDB;
-            if (sd.phoneChatDB) phoneChatDB = sd.phoneChatDB;
-            if (sd.phoneTaskDB) phoneTaskDB = sd.phoneTaskDB;
-            if (sd.phoneMatchDB) phoneMatchDB = sd.phoneMatchDB;
-            if (sd.worldConfig) worldConfig = sd.worldConfig;
-
-            // 【核心补全 A】同步研发中的临时数据
-            if (sd.tempDrinkStats) {
-                editorState.tempStats = sd.tempDrinkStats;
-            }
+            if (sd.tempDrinkStats) editorState.tempStats = sd.tempDrinkStats;
         }
-    } catch (e) { 
-        console.warn("Mvu同步异常，将尝试使用本地缓存恢复", e); 
-    }
+    } catch (e) { console.warn("MVU同步跳过"); }
 
-    // 2. 从本地 Session 恢复进度状态 (剧情索引、当前活跃角色)
-    try {
-        const session = JSON.parse(localStorage.getItem("milktea_session") || "{}");
-         
-        if (session.currentActiveCustomerId) currentActiveCustomerId = session.currentActiveCustomerId;
-    } catch (e) { console.error("Session读取失败", e); }
-
-    // 3. 唤醒基础 UI (金钱显示、店名、大堂背景)
-    wakeUpMainHallUI(); 
+    // 4. UI 基础渲染
+    syncGlobalBalance();
+    renderShopNameUI();
     renderCustomerList();
     initShowcaseKey();
+    updateEnvironmentUI(worldConfig);
 
-    // 4. 【核心补全 B】执行深度场景分支恢复
+    // 5. 剧情启动（必须在场景跳转判断之前！）
+    if (dialogData && dialogData.length > 0) {
+        dialogIndex = 0;
+        syncStoryUI(dialogData[0]);
+        document.getElementById("gameDialog").style.display = "block";
+    } else {
+        document.getElementById("gameDialog").style.display = "none";
+    }
+
+    // 6. 场景恢复（放在最后）
     if (appSettings.activeScene === 'layer-result') {
-        // --- 恢复工坊精修场景 ---
-        
-        // 尝试从 LocalStorage 恢复图层 (位置、染色、缩放)
-        const savedLayersStr = localStorage.getItem("milktea_editor_layers");
-        if (savedLayersStr) {
-            try {
-                const parsed = JSON.parse(savedLayersStr);
-                editorState.layers = parsed.layers || [];
-            } catch(e) { console.error("图层解析失败", e); }
+        const savedLayers = localStorage.getItem("milktea_editor_layers");
+        if (savedLayers) {
+            try { editorState.layers = JSON.parse(savedLayers).layers; } catch(e){}
         }
-
-        // 打开层并强制重新绘制
         openLayer("layer-result");
-        updateStatsUI(); // 填入档案文字数据
-        renderEditor();  // 异步绘制杯子图片
-        console.log("✅ 工坊精修场景已成功恢复");
-        return; 
-    } 
-    else if (appSettings.activeScene === 'match-result') {
-        // --- 恢复比赛演播厅场景 ---
+        updateStatsUI();
+        renderEditor();
+    } else if (appSettings.activeScene === 'match-result') {
         const mId = localStorage.getItem("milktea_match_id");
         if (mId) {
             openLayer("layer-phone");
-            navigateToPhone("match-detail"); 
-            openMatchResult(mId); 
-            console.log("✅ 比赛现场已成功恢复");
-            return;
+            navigateToPhone("match-detail");
+            openMatchResult(mId);
         }
+    } else {
+        navigateToPhone("home");
     }
-
-    // 5. 默认状态：进入手机桌面
-    navigateToPhone("home");
 });
-
+      
 let editorState = {
         layers: [],
         selectedId: null,
