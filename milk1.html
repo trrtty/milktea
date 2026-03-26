@@ -5568,7 +5568,7 @@
       // ================= 天气 ================= 
       let worldConfig = {{get_message_variable::stat_data.worldConfig}};
       // ================= 剧情对白 ================= 
-      const dialogData =  [];
+      let dialogData = []; // 改为 let
 
       let isSubmittingTask = false; // 是否处于任务提交模式
       let selectedTaskDrinkKey = null; // 当前选中的配方 Key
@@ -6961,40 +6961,43 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
 // --- 唯一、统一的页面初始化逻辑 ---
 // --- 强化版：全能初始化与场景恢复系统 ---
 window.addEventListener("load", async () => {
-    try {
-        // 1. 获取酒馆当前的聊天记录
-        const chat = getChat(); 
-        if (chat && chat.length > 0) {
-            // 2. 从后往前找，获取最后一条角色（AI）的消息
-            const lastAiMsg = [...chat].reverse().find(m => m.role === 'assistant');
+  
+    
+
+    setScale();
+
+
+        // --- 【校准后的提取逻辑】 ---
+        try {
+        // 使用 TavernHelper 接口获取从 0 到最新的所有消息
+        // getChatMessages('0-{{lastMessageId}}') 是最稳妥的获取全量消息的方法
+        const allMessages = TavernHelper.getChatMessages('0-{{lastMessageId}}');
+
+        if (allMessages && allMessages.length > 0) {
+            // 从后往前找，找到第一条 role 为 'assistant' (AI) 的消息
+            const lastAiMsg = [...allMessages].reverse().find(m => m.role === 'assistant');
             
-            if (lastAiMsg) {
-                // 3. 执行你的正则匹配
+            if (lastAiMsg && lastAiMsg.message) {
+                // 使用你提供的正则进行捕获
                 const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/;
                 const match = lastAiMsg.message.match(regex);
                 
                 if (match && match[1]) {
                     try {
-                        // 4. 捕获的内容赋值给 dialogData (解析 JSON)
-                        dialogData = JSON.parse(match[1].trim());
-                        console.log("✅ 成功从最新 AI 消息提取剧情数据");
+                        const parsed = JSON.parse(match[1].trim());
+                        if (Array.isArray(parsed)) {
+                            dialogData = parsed;
+                            console.log("✅ 成功从 TavernHelper 提取剧情数据:", dialogData);
+                        }
                     } catch (jsonErr) {
-                        console.error("❌ 提取到的内容不是有效的 JSON 格式", jsonErr);
+                        console.warn("⚠️ 捕获到了标签但 JSON 格式解析失败:", jsonErr);
                     }
                 }
             }
         }
     } catch (e) {
-        console.error("读取聊天记录失败:", e);
+        console.error("❌ 获取聊天记录失败:", e);
     }
-
-    if (dialogData && dialogData.length > 0) {
-        dialogIndex = 0;
-        syncStoryUI(dialogData[0]);
-    }
-    
-
-    setScale();
     let liveMvuData = null;
 
     // 1. 同步云端数据到本地变量
