@@ -5541,32 +5541,710 @@
         "https://raw.githubusercontent.com/trrtty/milktea/main/bg/";
 // 独立的系统设置对象
 
-      // ================= 店铺基础配置 ================= 
-      let shopConfig = {{get_message_variable::stat_data.shopConfig}};  
-      // ================= 界面基础配置 =================
-      let appSettings ={{get_message_variable::stat_data.appSettings}};  
-      // ================= 原料系统 ================= 
-      let unlockedIngredients = {{get_message_variable::stat_data.unlockedIngredients}};
-      // ================= 顾客数据库 ================= 
-      let customersDB = {{get_message_variable::stat_data.customersDB}}; 
-      // ================= 菜单数据 =================
-      let shopMenu = {{get_message_variable::stat_data.shopMenu}};  
-      // ================= 临时调饮数据 ================= 
-      const MY_TEMP_STATS = {{get_message_variable::stat_data.tempDrinkStats}}; 
-      // ================= 财务数据 =================
-      let shopFinancials = {{get_message_variable::stat_data.shopFinancials}};  
-      // ================= 手机 · 聊天 ================= 
-      let phoneChatDB = {{get_message_variable::stat_data.phoneChatDB}};
-      // ================= 手机 · 任务 ================= 
-      let phoneTaskDB = {{get_message_variable::stat_data.phoneTaskDB}}; 
-      // ================= 手机 · 比赛报名 ================= 
-      let phoneMatchDB = {{get_message_variable::stat_data.phoneMatchDB}}; 
-      // ================= 比赛结果 ================= 
-      let matchResultsDB = {{get_message_variable::stat_data.matchResultsDB}}; 
-      // ================= 店铺排行 / 商城 =================
-      let phoneShopDB = {{get_message_variable::stat_data.phoneShopDB}};
-      // ================= 天气 ================= 
-      let worldConfig = {{get_message_variable::stat_data.worldConfig}};
+      let shopConfig = {
+        // --- 基础信息 ---
+        identity: {
+          name: "白日梦", // 可修改
+          level: 3, // 店铺等级
+          xp: 450, // 当前经验值
+          xpNext: 1000, // 升级所需经验
+          reputation: "初露锋芒", // 声望称号
+          address: "青木区·宁静巷 12 号", // 店铺地址（影响客群类型）
+          establishedDate: "2024-05-01",
+        },
+
+        // --- 经营指标 (影响每日结算) ---
+        stats: {
+          popularity: 65, // 知名度 (0-100)
+          hygiene: 88, // 卫生值 (过低会产生 Debuff)
+          service: 92, // 服务质量
+          seatingCapacity: 12, // 座位数量
+          staffCount: 2, // 员工人数
+          dailyRent: 50, // 每日固定租金
+          avgWaitTime: "4min", // 平均出餐时间
+        },
+
+
+        // --- 状态与增益系统 (Buff/Debuff) ---
+        // 每一个效果都有对应的消除/购买价格
+        activeEffects: [
+          {
+            id: "buff_summer_breeze",
+            name: "夏日清凉",
+            type: "buff",
+            icon: "❄️",
+            effect: "冰饮销量提升 20%",
+            desc: "由于店内冷气充足，客人们更愿意点冰饮。",
+            remainingDays: 3,
+            costToRenew: 300, // 续期价格
+            isRemovable: false,
+          },
+          {
+            id: "debuff_construction",
+            name: "门口施工",
+            type: "debuff",
+            icon: "🚧",
+            effect: "进店率下降 15%",
+            desc: "店铺门口正在修路，通行不便。",
+            remainingDays: 1,
+            costToClear: 500, // 紧急疏通费用（消除价格）
+            isRemovable: true,
+          },
+          {
+            id: "debuff_dirty_floor",
+            name: "地面油腻",
+            type: "debuff",
+            icon: "🧹",
+            effect: "服务评分每小时 -1",
+            desc: "地面有些粘稠，需要深度清洁。",
+            remainingDays: 999, // 永久直到处理
+            costToClear: 150, // 请保洁的费用
+            isRemovable: true,
+          },
+        ],
+
+        // --- 增益商店 (可供购买的长期 Buff) ---
+        buffMarket: [
+          {
+            id: "mkt_fragrance",
+            name: "高山熏香",
+            cost: 800,
+            effect: "全员好感度获取速度 +10%",
+            duration: 7,
+          },
+          {
+            id: "mkt_delivery",
+            name: "外卖特约",
+            cost: 1500,
+            effect: "开启外卖接单功能，每日收入增加",
+            duration: 30,
+          },
+        ],
+      };
+ 
+let appSettings ={"drinkBackground":"背景1","activeScene":null};
+      let unlockedIngredients = {
+        tea_mid: {
+          id: "tea_mid",
+          name: "经典_中层",
+          type: "base",
+          z: 3,
+          cost: 3,
+          season: "全",
+          coreTags: { n: "清爽", l: 2 },
+          subTags: { n: "微苦", l: 1 },
+          desc: "茶感适中，平衡之选",
+        },
+        tea_full: {
+          id: "tea_full",
+          name: "经典_全层",
+          type: "base",
+          z: 2,
+          cost: 4,
+          season: "冬",
+          coreTags: { n: "醇厚", l: 3 },
+          subTags: { n: "甜腻", l: 1 },
+          desc: "色泽深沉，茶味浓郁",
+        },
+        ice_gold: {
+          id: "ice_gold",
+          name: "琥珀冰砖",
+          type: "base",
+          z: 30,
+          cost: 5,
+          season: "全",
+          coreTags: { n: "醇厚", l: 3 },
+          subTags: { n: "甜腻", l: 2 },
+          desc: "用桂花茶冻成的冰块，融化后会有淡淡花香",
+          baseImageName: "经典_中层",
+          defaultTint: "#FFFFFF",
+        },
+        tea_top: {
+          id: "tea_top",
+          name: "经典_上层",
+          type: "base",
+          z: 4,
+          cost: 3,
+          season: "夏",
+          coreTags: { n: "清爽", l: 3 },
+          subTags: { n: "清冽", l: 2 },
+          desc: "汤色清澈，口感轻盈",
+        },
+        wall_taro: {
+          id: "wall_taro",
+          name: "挂壁芋泥",
+          type: "base",
+          z: 49,
+          cost: 4,
+          season: "冬",
+          coreTags: { n: "黏腻", l: 3 },
+          subTags: { n: "绵密", l: 2 },
+          desc: "浓稠芋泥挂壁，纹理美观",
+        },
+        wall_choco: {
+          id: "wall_choco",
+          name: "挂壁巧克力酱",
+          type: "base",
+          z: 48,
+          cost: 3,
+          season: "冬",
+          coreTags: { n: "甜腻", l: 3 },
+          subTags: { n: "黏腻", l: 2 },
+          desc: "甜蜜巧克力流纹",
+        },
+        ice: {
+          id: "ice",
+          name: "冰块",
+          type: "base",
+          z: 8,
+          cost: 0,
+          season: "夏",
+          coreTags: { n: "清冽", l: 3 },
+          subTags: { n: "脆爽", l: 3 },
+          desc: "夏日灵魂，极致冰爽",
+        },
+        grapefruit: {
+          id: "grapefruit",
+          name: "西柚粒",
+          type: "topping",
+          z: 20,
+          cost: 5,
+          season: "夏",
+          coreTags: { n: "脆爽", l: 2 },
+          subTags: { n: "清冽", l: 2 },
+          desc: "果肉饱满，酸甜爆汁",
+        },
+        mango: {
+          id: "mango",
+          name: "芒果",
+          type: "topping",
+          z: 21,
+          cost: 6,
+          season: "夏",
+          coreTags: { n: "甜腻", l: 2 },
+          subTags: { n: "绵密", l: 1 },
+          desc: "大块芒果，香甜软糯",
+        },
+        mango_slice: {
+          id: "mango_slice",
+          name: "芒果片",
+          type: "topping",
+          z: 22,
+          cost: 4,
+          season: "夏",
+          coreTags: { n: "清爽", l: 2 },
+          subTags: null,
+          desc: "轻薄果片，点缀专用",
+        },
+        strawberry_big: {
+          id: "strawberry_big",
+          name: "大草莓",
+          type: "topping",
+          z: 23,
+          cost: 8,
+          season: "冬",
+          coreTags: { n: "清爽", l: 2 },
+          subTags: { n: "脆爽", l: 1 },
+          desc: "整颗红颜草莓，颜值担当",
+        },
+        strawberry_half: {
+          id: "strawberry_half",
+          name: "半个草莓",
+          type: "topping",
+          z: 23,
+          cost: 4,
+          season: "冬",
+          coreTags: { n: "清爽", l: 1 },
+          subTags: null,
+          desc: "切面诱人，适合贴壁",
+        },
+        strawberry_chunk: {
+          id: "strawberry_chunk",
+          name: "草莓块",
+          type: "topping",
+          z: 23,
+          cost: 5,
+          season: "冬",
+          coreTags: { n: "绵密", l: 1 },
+          subTags: { n: "酸甜", l: 2 },
+          desc: "果肉碎块，口感丰富",
+        },
+        blueberry: {
+          id: "blueberry",
+          name: "大蓝莓",
+          type: "topping",
+          z: 24,
+          cost: 6,
+          season: "夏",
+          coreTags: { n: "清冽", l: 2 },
+          subTags: { n: "脆爽", l: 1 },
+          desc: "深蓝浆果，抗氧神器",
+        },
+        peach1: {
+          id: "peach1",
+          name: "桃子片1",
+          type: "topping",
+          z: 25,
+          cost: 4,
+          season: "夏",
+          coreTags: { n: "清爽", l: 3 },
+          subTags: { n: "脆爽", l: 1 },
+          desc: "粉嫩桃肉，香气扑鼻",
+        },
+        apple: {
+          id: "apple",
+          name: "苹果片",
+          type: "topping",
+          z: 26,
+          cost: 3,
+          season: "全",
+          coreTags: { n: "清爽", l: 2 },
+          subTags: { n: "脆爽", l: 1 },
+          desc: "清脆苹果，健康之选",
+        },
+        banana: {
+          id: "banana",
+          name: "香蕉片",
+          type: "topping",
+          z: 27,
+          cost: 3,
+          season: "全",
+          coreTags: { n: "绵密", l: 2 },
+          subTags: { n: "甜腻", l: 1 },
+          desc: "香甜软糯，能量补充",
+        },
+      };
+
+      let customersDB = {
+        上班族: {
+          id: "上班族",
+          name: "唐思彤",
+          gender: "女",
+          age: "26",
+          zodiac: "摩羯座",
+          friendship: 5,
+          romance: 0,
+          likesBase: ["纯乌龙", "冰水"],
+          likesTopping: ["无小料"],
+          spawnTime: "工作日早晨 (8:00-9:00)",
+          desc: "看起来风风火火的，总是在打电话。不要给她推荐太甜的东西，她需要清醒。对出餐速度要求极高。",
+          favName: "乌龙冰茶",
+          favCode:
+            "v2|3,FFD700|7,|5,FF6347|21,FFB6C1|23,FF0000|40,00FF7F",
+        },
+        大学生: {
+          id: "大学生",
+          name: "陆时晏",
+          desc: "抱着滑板的阳光少年", // 新的短描述，显示在名字下方
+          gender: "男",
+          age: "19",
+          zodiac: "双鱼座",
+          friendship: 10,
+          romance: 0,
+          likesBase: ["乌龙茶", "红茶"],
+          likesTopping: ["雪顶", "巧克力"],
+          spawnTime: "放学后 (16:30)",
+          notes: "阳光活力。爱听歌、滑滑板，养了一只柯基叫皮皮，每次都会单独分装奶油给小柯基吃。", // 原来的长描述
+          favName: "草莓雪顶红茶",
+          favCode: "MSwwLDAsMCwxMDAsMTAwLDEwMCwxMDAsOzQsMCwwLDEsMTAwLDEwMCwxMDAsMTAwLGM0N2E0NTsxMywwLDEwLDIsMTE2LDEwMCwxMDAsMTAwLGZmNGQ2ZDsyOCwzMCw0MCwzLDkwLDEwMCwxMDAsMTAwLGZmZWVmMjswLDAsMCw0LDEwMCwxMDAsMTAwLDEwMCw=",
+        },
+     
+      };
+
+      let shopMenu = {
+        经典珍珠奶茶: {
+          name: "经典珍珠奶茶",
+          cost: 5,
+          price: 12,
+          ingredients: ["经典_中层", "珍珠"],
+          tags: ["经典", "入门"],
+          desc: "最基础的珍珠奶茶，一切故事的起点。",
+          finalRating: 4,
+          qualityStars: 3,
+          tasteStars: 3,
+          refreshingScore: 10,
+          mellowScore: 12,
+          popularity: 1,
+          createdAt: "2025-10-01 10:00:00",
+          sales: 0,
+          isShowcase: true,
+          code: "MSwwLDAsMCwxMDAsMTAwLDEwMCwxMDAsOzQsMCwwLDEsMTAwLDEwMCwxMDAsMTAwLDsxMCwwLDAsMiwxMDAsMTAwLDEwMCwxMDAsOzEyLDE0MCwwLDMsMTAwLDEwMCwxMDAsMTAwLDsxNiw3MCwzNjAsNCw3NywxMDAsMTAwLDEwMCw7MzQsMCwwLDUsMTAwLDEwMCwxMDAsMTAwLDswLDAsMCw2LDEwMCwxMDAsMTAwLDEwMCw=",
+        },
+        经典5珍珠奶茶: {
+          name: "经典5珍珠奶茶",
+          cost: 5,
+          price: 12,
+          ingredients: ["经典_中层", "珍珠"],
+          tags: ["经典", "入门"],
+          desc: "最基础的珍珠奶茶，一切故事的起点。",
+          finalRating: 4,
+          qualityStars: 3,
+          tasteStars: 3,
+          refreshingScore: 10,
+          mellowScore: 12,
+          popularity: 1,
+          createdAt: "2025-10-01 10:00:00",
+          sales: 0,
+          isShowcase: true,
+          code: "MSwwLDAsMCwxMDAsMTAwLDEwMCwxMDAsOzQsMCwwLDEsMTAwLDEwMCwxMDAsMTAwLGQ1Yjc3NjszLDAsMCwyLDEwMCwxMDAsMTAwLDEwMCw7MTgsMCwwLDMsMTAwLDEwMCwxMDAsMTAwLDswLDAsMCw0LDEwMCwxMDAsMTAwLDEwMCw=",
+        },
+        经典4珍珠奶茶: {
+          name: "经4典珍珠奶茶",
+          cost: 5,
+          price: 12,
+          ingredients: ["经典_中层", "珍珠"],
+          tags: ["经典", "入门"],
+          desc: "最基础的珍珠奶茶，一切故事的起点。",
+          finalRating: 4,
+          qualityStars: 3,
+          tasteStars: 3,
+          refreshingScore: 10,
+          mellowScore: 12,
+          popularity: 1,
+          createdAt: "2025-10-01 10:00:00",
+          sales: 0,
+          isShowcase: true,
+          code: "MSwwLDAsMCwxMDAsMTAwLDEwMCwxMDAsOzQsMCwwLDEsMTAwLDEwMCwxMDAsMTAwLGQ1Yjc3NjszLDAsMCwyLDEwMCwxMDAsMTAwLDEwMCw7MTgsMCwwLDMsMTAwLDEwMCwxMDAsMTAwLDswLDAsMCw0LDEwMCwxMDAsMTAwLDEwMCw=",
+        },
+        经三典珍珠奶茶: {
+          name: "经三典珍珠奶茶",
+          cost: 5,
+          price: 12,
+          ingredients: ["经典_中层", "珍珠"],
+          tags: ["经典", "入门"],
+          desc: "最基础的珍珠奶茶，一切故事的起点。",
+          finalRating: 3,
+          qualityStars: 3,
+          tasteStars: 3,
+          refreshingScore: 10,
+          mellowScore: 12,
+          popularity: 1,
+          createdAt: "2025-12-01 10:00:00",
+          sales: 0,
+          isShowcase: true,
+          code: "MSwwLDAsMCwxMDAsMTAwLDEwMCwxMDAsOzQsMCwwLDEsMTAwLDEwMCwxMDAsMTAwLDszLDAsMCwyLDEwMCwxMDAsMTAwLDEwMCw7MiwwLDAsMywxMDAsMTAwLDEwMCwxMDAsOzcsMCwwLDQsMTAwLDEwMCwxMDAsMTAwLEZGRkZGRjsyNiwwLDAsNSwxMDAsMTAwLDEwMCwxMDAsOzE4LDAsMCw2LDEwMCwxMDAsMTAwLDEwMCw7OCwwLDAsNywxMDAsMTAwLDEwMCwxMDAsOzM3LDAsMCw4LDEwMCwxMDAsMTAwLDEwMCw7OSwwLDAsOSwxMDAsMTAwLDEwMCwxMDAsOzEwLDAsMCwxMCwxMDAsMTAwLDEwMCwxMDAsOzEzLDAsMCwxMSwxMDAsMTAwLDEwMCwxMDAsOzEyLDAsMCwxMiwxMDAsMTAwLDEwMCwxMDAsOzE1LDAsMCwxMywxMDAsMTAwLDEwMCwxMDAsOzE2LDAsMCwxNCwxMDAsMTAwLDEwMCwxMDAsOzE3LDAsMCwxNSwxMDAsMTAwLDEwMCwxMDAsOzUsMCwwLDE2LDEwMCwxMDAsMTAwLDEwMCxGRkQ3MDA7MzQsMCwwLDE4LDEwMCwxMDAsMTAwLDEwMCw7NiwwLDAsMTksMTAwLDEwMCwxMDAsMTAwLDswLDAsMCwyMCwxMDAsMTAwLDEwMCwxMDAs",
+        },        经2典珍珠奶茶: {
+          name: "经2典珍珠奶茶",
+          cost: 5,
+          price: 22,
+          ingredients: ["经典_中层", "珍珠"],
+          tags: ["经典", "入门"],
+          desc: "最基础的珍珠奶茶，一切故事的起点。",
+          finalRating: 3,
+          qualityStars: 3,
+          tasteStars: 3,
+          refreshingScore: 10,
+          mellowScore: 12,
+          popularity: 1,
+          createdAt: "2025-08-01 10:00:00",
+          sales: 0,
+          isShowcase: true,
+          code: "MSwwLDAsMCwxMDAsMTAwLDEwMCwxMDAsOzQsMCwwLDEsMTAwLDEwMCwxMDAsMTAwLGQ1Yjc3NjszLDAsMCwyLDEwMCwxMDAsMTAwLDEwMCw7MTgsMCwwLDMsMTAwLDEwMCwxMDAsMTAwLDswLDAsMCw0LDEwMCwxMDAsMTAwLDEwMCw=",
+        },
+      };
+
+      const MY_TEMP_STATS = {
+        name: "临时奶茶",
+        cost: 17,
+        price: 1,
+        ingredients: ["经典_全层", "经典_中层", "经典_上层", "奶盖", "珍珠"],
+        tags: ["经典", "入门"],
+        desc: "最基础的珍珠奶茶，一切故事的起点。",
+        finalRating: 4.4,
+        qualityStars: 5,
+        tasteStars: 3.8,
+        refreshingScore: 5,
+        mellowScore: 8,
+        popularity: 1,
+        createdAt: "2025/12/30 16:40:19",
+        sales: 0,
+        isShowcase: false,
+        code: null,
+      };
+
+      // 财务数据对象
+      let shopFinancials = {
+        currentBalance: 80,
+        lastUpdate: "2024-05-24 10:00",
+        records: [
+          {
+            date: "05-23",
+            item: "昨日营业额 (堂食)",
+            amount: 450,
+            type: "income",
+          },
+          { date: "05-23", item: "外卖平台结算", amount: 215, type: "income" },
+          {
+            date: "05-23",
+            item: "原材料采购: 乌龙茶坯",
+            amount: -120,
+            type: "expense",
+          },
+          {
+            date: "05-23",
+            item: "原材料采购: 鲜乳",
+            amount: -60,
+            type: "expense",
+          },
+          { date: "05-23", item: "当日商铺租金", amount: -50, type: "expense" },
+          { date: "05-22", item: "设备维护费", amount: -100, type: "expense" },
+          { date: "05-22", item: "新品研发奖励", amount: 100, type: "income" },
+          { date: "05-22", item: "新品研发奖励", amount: 100, type: "income" },
+        
+          { date: "05-22", item: "新品研发奖励", amount: 100, type: "income" }, { date: "05-22", item: "新品研发奖励", amount: 100, type: "income" }, { date: "05-22", item: "新品研发奖励", amount: 100, type: "income" }, { date: "05-22", item: "新品研发奖励", amount: 100, type: "income" }, { date: "05-22", item: "新品研发奖励", amount: 100, type: "income" },
+        
+        ],
+      };
+      // 手机聊天数据源
+      let phoneChatDB = {
+        上班族: {
+          id: "上班族",
+          name: "唐思彤",
+          time: "昨天 08:35",
+          lastMsg: "好的，谢谢。",
+          history: [
+            { type: "sent", text: "唐小姐，您的无糖乌龙茶已经做好了。" },
+            {
+              type: "received",
+              text: "好的，111111111111111111111111111111111111111111111111111111111谢谢。",
+            },
+          ],
+        },
+        大学生: {
+          id: "大学生",
+          name: "陆时晏",
+          time: "1小时前",
+          lastMsg:
+            "姐姐在吗？今天会开门测试测试测试测试测试测试测试测试从从市场上出售吧？",
+          history: [
+            {
+              type: "received",
+              text: "姐姐在吗？测试测试测试擦擦擦身上都是VS的VS的v今天会开门吧？",
+            },
+          ],
+        },
+        乐队主唱: {
+          id: "乐队主唱",
+          name: "薄野",
+          time: "刚刚",
+          lastMsg:
+            "老板娘，我闻到你店里……充满了‘挑战’和‘机遇’的复杂味道。挺有意思的。今晚老地方见？",
+          history: [
+            {
+              type: "received",
+              text: "老板娘，我闻到你店里……充满了‘挑战’和‘机遇’的复杂味道。挺有意思的。今晚老地方见？",
+            },
+          ],
+        },
+      };
+      let phoneTaskDB = {
+        上班族: {
+          id: "上班族",
+          name: "唐思彤",
+          backstory: "下午连开了三个会，脑子快炸了，急需一杯清爽的东西续命...",
+          constraints: [
+            "❄️ 必须加冰块",
+            "🍵 基底必须含有“经典_上层”",
+            "🚫 小料不得超过2种",
+            "🍬 甜度属性必须为“清爽”",
+          ],
+          reward: "💰 800 金币 + 🔥 知名度 50",
+          status: "active", // active, completed
+        },
+        大学生: {
+          id: "大学生",
+          name: "陆时晏",
+          backstory:
+            "今天皮皮过生日，我想带它去草坪野餐，能不能做一杯看起来就很粉嫩的下午茶？",
+          constraints: [
+            "🍓 必须含有“大草莓”",
+            "🍦 必须有“雪顶”",
+            "✨ 综合品质星级 ≥ 4星",
+          ],
+          reward: "💰 1200 金币 + 🎁 神秘装饰品",
+          status: "active",
+        },
+      };
+
+      let phoneMatchDB = {
+        "青木区首届‘匠心茶饮’大赛": {
+          desc: "寻找最能驱散酷暑的极致冰爽风味，让冰块在杯中起舞。",
+          requirement: "❄️ 必须含有“冰块” | 🍡 基底评分 ≥ 3",
+          reward: "🏆 称号：夏日调饮大师 | 💰 5000 金币",
+          judges: ["上班族", "大学生", "上班族"],
+        },
+        "醇厚暖冬·主题赛": {
+          desc: "谁才是温润之王？我们需要最温暖灵魂的浓郁奶香。",
+          requirement: "🍵 必须含有“经典_全层” | ✨ 醇厚属性 ≥ 4",
+          reward: "🏆 称号：冬日暖阳 | 🎁 稀有装饰：黄金茶壶",
+          judges: ["大学生", "上班族", "大学生"],
+        },
+      };
+
+let matchResultsDB = {"青木区首届‘匠心茶饮’大赛":{"competitors":[{"shopName":"白日梦","drinkName":"经典珍珠奶茶"},{"shopName":"烟水茶铺","drinkName":"春雾白毫","price":28,"desc":"极简主义的胜利，只取春茶最嫩的一芽一叶，佐以晨露般的冰晶。","ingredients":["经典_全层","冰块"],"tags":["极致清爽","茶韵","零糖"],"stats":{"finalRating":4.6,"qualityStars":5,"tasteStars":4.2,"refreshingScore":10,"mellowScore":2},"code":"v2|3,FFD700|7,|5,FF6347|21,FFB6C1|23,FF0000|40,00FF7F"},{"shopName":"甜心派对","drinkName":"樱花粉粉乐","price":15,"desc":"粉色的樱花糖浆加上大量的奶油和糖果，甜到心里。","ingredients":["大红豆","大布丁","棉花糖"],"tags":["甜蜜爆表","少女心"],"stats":{"finalRating":3.2,"qualityStars":2,"tasteStars":3,"refreshingScore":1,"mellowScore":9},"code":"MSwwLDAsMCwxMDAsMTAwLDEwMCwxMDAsOzIxLDAsMCwxLDEwMCwxMDAsMTAwLDEwMCw7MjAsMCwwLDIsMTAwLDEwMCwxMDAsMTAwLDsyOSwwLDAsMywxMDAsMTAwLDEwMCwxMDAsOzAsMCwwLDQsMTAwLDEwMCwxMDAsMTAwLA=="}],"judges":[{"id":"大学生","name":"陆时晏","focus":"颜值与活力","pref":"喜欢甜的和好看的","commentary":{"白日梦":"哇！这个雪顶和草莓的配色简直绝了！拍照发朋友圈肯定很多赞！而且茉莉花香好清新。","烟水茶铺":"嗯...有点太淡了，虽然闻起来很香，但是我想喝点有嚼劲的。","甜心派对":"好甜！不过我想起小时候吃的糖果了，偶尔喝喝还行。"},"scores":{"白日梦":9.5,"烟水茶铺":7,"甜心派对":8}},{"id":"上班族","name":"唐思彤","focus":"效率与清爽","pref":"讨厌太甜腻，追求提神","commentary":{"白日梦":"本来以为加了奶盖会腻，没想到茉莉花茶底完全中和了，意外地清爽。加班来一杯不错。","烟水茶铺":"这正是我需要的。干净，利落，没有多余的东西。完美。","甜心派对":"这是糖浆兑水吗？喝一口我就想去测血糖。拒绝。"},"scores":{"白日梦":8.5,"烟水茶铺":9.8,"甜心派对":2}},{"id":"护士","name":"沈轻","focus":"健康与洁净","pref":"偏好天然食材，不喜欢色素感","commentary":{"白日梦":"看得出水果很新鲜，不是罐头。茶底也很干净。是个健康的选择。","烟水茶铺":"茶多酚含量应该很高，虽然我不建议空腹喝这么浓的茶，但品质确实好。","甜心派对":"全是添加剂的味道...为了健康考虑，我不推荐。"},"scores":{"白日梦":9,"烟水茶铺":8.5,"甜心派对":3}}],"result":{"winner":"白日梦","prize":"1500 金币 + 称号『寻芳客』","ceremonyText":"凭借着水果的鲜甜与花茶清幽的完美平衡，『雪顶娇莓伴茉香』在综合评分中拔得头筹！"}}};
+      let phoneShopDB = {
+        白日梦: {
+          owner: "{{user}}",
+          positioning: "匠心手作·社区茶饮",
+          avgPrice: 18,
+          rating: 4.0,
+          desc: "一家用最纯粹的原料，诠释茶饮本源的小店。招牌珍珠奶茶在首届“匠心茶饮”大赛中夺冠，一举成为青木区明星店铺。",
+          flagship: {
+            name: "经典珍珠奶茶"},
+          reviews: [
+            {
+              user: "不吃香菜的T女士",
+              rate: 5,
+              text: "偶然担任了一场比赛的评委，喝到了这家店的珍珠奶茶。非常惊喜。在这个追求新奇和堆料的时代，还能坚持做好一杯基础款的店家不多了。茶味浓郁，甜度克制，珍珠火候刚好。简单，但纯粹。喝完感觉下午开会的疲惫都消散了。已收藏，会回购。——P.S. 比对面那家甜到发齁的樱花饮料好喝一万倍。",
+              time: "1小时前",
+              replies: [],
+            },
+            {
+              user: "医学狗不熬夜",
+              rate: 4.5,
+              text: "从健康角度分析，这家店的配方确实比大多数网红店要好，添加剂少。珍珠奶茶的比例控制得不错，符合基本的营养逻辑。如果能推出更多低糖或无糖选择就更好了。",
+              time: "2小时前",
+              replies: [],
+            },
+          ],
+        },
+        糖潮: {
+          owner: "冉烟",
+          positioning: "潮流特调·网红打卡地",
+          avgPrice: 28,
+          rating: 4.2,
+          desc: "曾经的网红热门店，主打高颜值和季节限定。因在“匠心茶饮”大赛中表现不佳，口碑近期急速下滑。",
+          flagship: {
+            name: "绚烂樱之梦",
+            price: 28,
+            desc: "春日限定！将樱花风味融入草莓拿铁，搭配水晶爆珠，每一口都是少女心的绽放！",
+            code: "v2|3,FFD700|7,|5,FF6347|21,FFB6C1|23,FF0000|40,00FF7F",
+          },
+          reviews: [
+            {
+              user: "匿名用户",
+              rate: 1,
+              text: "什么网红店，比赛被人用最基础的珍珠奶茶吊打，老板还当场输不起跑路，笑死。那杯所谓的‘绚烂樱之梦’就是糖精水，谁喝谁知道。一生黑！",
+              time: "30分钟前",
+              replies: ["不想吃别吃"],
+            },
+          ],
+        },
+        七分甜: {
+          positioning: "连锁快消·性价比之选",
+          avgPrice: 12,
+          rating: 4.2,
+          desc: "全国连锁品牌，出餐快，价格实惠，是附近上班族和学生的首选。品质稳定，但缺乏惊喜。",
+          flagship: {
+            name: "招牌柠檬水",
+            price: 8,
+            desc: "简单解渴，价格便宜，销量常年第一。",
+            code: null,
+          },
+          reviews: [],
+        },
+        一茶一座: {
+          owner: "煮茶听雨",
+          positioning: "新中式茶馆·高端品茗",
+          avgPrice: 45,
+          rating: 4.9,
+          desc: "环境清幽的新中式茶馆，主营原叶手冲和高端茶饮。价格不菲，但物有所值，是商务洽谈和追求品质人士的最爱。",
+          flagship: {
+            name: "手冲武夷岩茶",
+            price: 58,
+            desc: "由专业茶艺师现场冲泡，茶香四溢，回味悠长。",
+            code: null,
+          },
+          reviews: [],
+        },
+        猫步轻敲: {
+          positioning: "猫咖·萌宠主题",
+          avgPrice: 35,
+          rating: 4.6,
+          desc: "可以边喝饮料边撸猫的天堂。饮品味道中规中矩，但可爱的猫咪是无法拒绝的卖点。需要排队。",
+          flagship: {
+            name: "猫爪棉花糖拿铁",
+            price: 38,
+            desc: "拿铁上漂浮着可爱的猫爪棉花糖，拍照打卡必备。",
+            code: null,
+          },
+          reviews: [],
+        },
+        果蔬能量站: {
+          positioning: "健康轻食·鲜榨果汁",
+          avgPrice: 25,
+          rating: 4.5,
+          desc: "主打健康概念，所有饮品均为新鲜水果蔬菜榨取，不加一滴糖。深受健身和养生人士喜爱。",
+          flagship: {
+            name: "羽衣甘蓝牛油果昔",
+            price: 32,
+            desc: "听起来黑暗，喝起来却意外清爽的健康饮品。",
+            code: null,
+          },
+          reviews: [],
+        },
+        转角咖啡: {
+          positioning: "精品手冲·咖啡爱好者据点",
+          avgPrice: 30,
+          rating: 4.7,
+          desc: "小巷深处的精品咖啡店，老板对咖啡豆极有研究。不卖奶茶，只为真正懂咖啡的人服务。",
+          flagship: {
+            name: "耶加雪菲手冲",
+            price: 35,
+            desc: "带有明亮的柑橘和花香，是懂行人的最爱。",
+            code: null,
+          },
+          reviews: [],
+        },
+        甜心盒子: {
+          positioning: "韩系网红·高颜值甜品",
+          avgPrice: 28,
+          rating: 3.8,
+          desc: "装修风格和产品颜值都拉满的网红店，和“糖潮”是直接竞争对手。味道偏甜，适合拍照。",
+          flagship: {
+            name: "云朵草莓冰",
+            price: 35,
+            desc: "巨大的棉花糖像云一样盖在草莓冰上，视觉效果满分。",
+            code: null,
+          },
+          reviews: [],
+        },
+        老张糖水铺: {
+          positioning: "传统糖水·街坊生意",
+          avgPrice: 10,
+          rating: 4.4,
+          desc: "开了几十年的老店，主要做街坊生意。价格便宜，用料扎实，充满了人情味。",
+          flagship: {
+            name: "红豆双皮奶",
+            price: 8,
+            desc: "每天现做的双皮奶，口感嫩滑，红豆软糯。",
+            code: null,
+          },
+          reviews: [],
+        },
+        茶言观色: {
+          positioning: "原叶纯茶·茶叶专卖",
+          avgPrice: 32,
+          rating: 4.3,
+          desc: "比赛中的对手之一，主打高品质原叶茶。调饮不是他们的强项，但茶叶品质很高。",
+          flagship: {
+            name: "云雾山铁观音",
+            price: 32,
+            desc: "采自海拔1800米高山，传统工艺炭焙，只为呈现最原始的岩骨花香。",
+            code: null,
+          },
+          reviews: [],
+        },
+      };
+
+      // --- 游戏世界环境配置 ---
+let worldConfig = {
+    year: "2026年",
+    season: "秋天",
+    time: "黄昏",
+    weather: "雨天"
+};
+  
       // ================= 剧情对白 ================= 
       let dialogData = []; // 改为 let
 
