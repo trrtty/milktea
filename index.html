@@ -4013,8 +4013,8 @@
         },
       };
     </script>
-  </head>
-  <body>
+
+
     <div
       id="svg-filter-storage"
       style="
@@ -5996,7 +5996,7 @@ let isSubmittingTask = false; // 是否处于任务提交模式
       let currentSortCriterion = "time";
       // 全局变量初始化
       let currentRecipePage = 1; // 当前页码
-const itemsPerPage = 2;    // 每页显示数量
+const itemsPerPage = 4;    // 每页显示数量
       let currentActiveCustomerId = "";
       let dialogIndex = -1;
 
@@ -9240,11 +9240,11 @@ container.style.paddingBottom = "150px";
 
     // --- 4. 应用滤镜 ---
     // 强制先重置一次 filter 属性，触发 Safari 的重绘机制
-    imgEl.style.filter = 'none';
+    const currentFilter = imgEl.style.filter.includes('url') ? '' : imgEl.style.filter;
     
-    // 使用 requestAnimationFrame 确保在下一帧应用新滤镜，最稳妥
     requestAnimationFrame(() => {
-        imgEl.style.filter = `url(#${uniqueId})`;
+        // 将原有的 filter 字符串和新的 url(#id) 拼在一起
+        imgEl.style.filter = `${currentFilter} url(#${uniqueId})`.trim();
     });
 }
 
@@ -9438,7 +9438,6 @@ function renderFavoriteDrink(item) {
     if (!layers) return;
     container.innerHTML = "";
 
-    // 维持“展示中”角标逻辑
     if (key === currentShowcaseKey) {
         const badge = document.createElement("div");
         badge.className = "absolute top-0 right-0 bg-[#8B4513] text-white text-xs px-2 py-1 rounded-bl-lg font-bold z-20";
@@ -9450,21 +9449,26 @@ function renderFavoriteDrink(item) {
     wrapper.className = "thumb-scaler";
     wrapper.style.cssText = `transform: scale(${scale}); position: relative; width: 650px; height: 650px; transform-origin: top left;`;
 
-    // --- 背景逻辑已移除，恢复纯净 ---
-
     layers.sort((a, b) => a.zIndex - b.zIndex).forEach((layer) => {
         const img = document.createElement("img");
         img.src = layer.src;
         img.style.cssText = `position:absolute; left:${layer.x}px; top:${layer.y}px; width:${layer.width * layer.scale}px; height:${layer.height * layer.scale}px; z-index:${layer.zIndex};`;
-        img.style.filter = `opacity(${layer.opacity}%) brightness(${layer.brightness}%) contrast(${layer.contrast}%)`;
+        
+        // --- 核心修复：1. 透明度单独使用 opacity 属性 ---
+        img.style.opacity = layer.opacity / 100;
+        
+        // --- 核心修复：2. 滤镜只写亮度和对比度 ---
+        img.style.filter = `brightness(${layer.brightness}%) contrast(${layer.contrast}%)`;
+
         wrapper.appendChild(img);
+
+        // --- 核心修复：3. 染色逻辑会追加在 filter 后面，不会覆盖 opacity ---
         if (layer.tintColor) {
             setTimeout(() => { applyTintFilter(img, layer.tintColor); }, 0);
         }
     });
     container.appendChild(wrapper);
-} 
-      // --- 缺失的缩略图生成函数 ---
+}
 // 升级版：支持全局背景注入的渲染引擎
 function renderThumbnailFromCode(container, code, scale, skipBg = false) {
     if (!container) return;
@@ -9474,14 +9478,9 @@ function renderThumbnailFromCode(container, code, scale, skipBg = false) {
     if (!layers) return;
 
     const wrapper = document.createElement("div");
-    
-    // --- 【关键修改点：根据 skipBg 决定背景色】 ---
-    // 如果 skipBg 为 true (弹窗模式)，背景透明；否则 (主推/点评模式)，背景白色保底
     const bgColor = skipBg ? "transparent" : "#fff";
-    
     wrapper.style.cssText = `width:650px; height:650px; position:relative; background:${bgColor}; transform: scale(${scale}); transform-origin: top left;`;
 
-    // 背景注入逻辑 (保持不变)
     if (skipBg === false && typeof appSettings !== 'undefined' && appSettings.drinkBackground) {
         const bgImg = document.createElement("img");
         bgImg.src = `${imgBaseUrl}${appSettings.drinkBackground}.PNG`;
@@ -9489,20 +9488,26 @@ function renderThumbnailFromCode(container, code, scale, skipBg = false) {
         wrapper.appendChild(bgImg);
     }
 
-    // 原料绘制逻辑 (保持不变)
     layers.sort((a, b) => a.zIndex - b.zIndex).forEach((layer) => {
         const img = document.createElement("img");
         img.src = layer.src;
         img.style.cssText = `position:absolute; left:${layer.x}px; top:${layer.y}px; width:${layer.width * layer.scale}px; height:${layer.height * layer.scale}px; z-index:${layer.zIndex};`;
-        img.style.filter = `opacity(${layer.opacity}%) brightness(${layer.brightness}%) contrast(${layer.contrast}%)`;
+        
+        // --- 核心修复：1. 透明度使用独立属性 ---
+        img.style.opacity = layer.opacity / 100;
+
+        // --- 核心修复：2. 滤镜初始化 ---
+        img.style.filter = `brightness(${layer.brightness}%) contrast(${layer.contrast}%)`;
+
         wrapper.appendChild(img);
+
+        // --- 核心修复：3. 染色 ---
         if (layer.tintColor) {
             setTimeout(() => { applyTintFilter(img, layer.tintColor); }, 0);
         }
     });
     container.appendChild(wrapper);
 }
-
 function openDirectDossier() {
         if (!currentActiveCustomerId) return;
 
@@ -13155,6 +13160,10 @@ function getSelectedLayer() {
     return editorState.layers.find((l) => l.uid === editorState.selectedId);
 }
 </script>
-  </body>
+
+</head>
+<body>
+  <div id="root"></div>
+</body>
 </html>
 
