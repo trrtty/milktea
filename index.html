@@ -8758,11 +8758,10 @@ container.style.paddingBottom = "150px";
     const drink = shopMenu[key];
     if (!drink) return;
 
-    // 1. 【核心逻辑】从整个剧情数据 (dialogData) 中提取所有出现过的唯一角色名字
-    // 过滤掉系统标签：旁白、系统、{{user}}
+
     const uniqueCharacterNames = [...new Set(dialogData
         .map(item => item.name)
-        .filter(name => name && !["旁白", "系统", "{{user}}", "洛芙"].includes(name))
+        .filter(name => name && !["旁白", "系统", playerName].includes(name))
     )];
 
     // 2. 准备决策弹窗
@@ -10630,7 +10629,9 @@ function renderSimMatchList() {
     });
 
     // 3. 计算玩家的动态排名
-    const myShopKey = Object.keys(phoneShopDB).find(key => phoneShopDB[key].owner === "{{user}}");
+    const myShopKey = Object.keys(phoneShopDB).find(key => 
+    phoneShopDB[key].owner === playerName || phoneShopDB[key].owner === "{{user}}"
+);
     const myShopData = phoneShopDB[myShopKey];
     const myRank = calculateCityRank(myShopData.rating, currentShopName);
 
@@ -10698,8 +10699,7 @@ let isCommentOwner = true; // 是否以店长身份评论
 // --- 核心修改：动态获取玩家招牌菜数据 ---
 const fsName = (shop.flagship && shop.flagship.name) || "暂无招牌";
         // 判定数据源：如果是玩家店且配方库有同名奶茶，则读配方库；否则读静态数据
-        const source = (shop.owner === "{{user}}" && shopMenu[fsName]) ? shopMenu[fsName] : (shop.flagship || {});
-
+        const source = ((shop.owner === playerName || shop.owner === "{{user}}") && shopMenu[fsName]) ? shopMenu[fsName] : (shop.flagship || {});
         const fsPrice = source.price || "--";
         const fsDesc = source.desc || "店长很懒，还没有介绍这杯饮品。";
         const fsCode = source.code || null;
@@ -11237,7 +11237,9 @@ const myShopName = shopConfig.identity.name;
         
     // 1. 获取玩家店铺实时数据
     const myShopName = s.identity.name;
-    const myShopKey = Object.keys(phoneShopDB).find(key => phoneShopDB[key].owner === "{{user}}");
+    const myShopKey = Object.keys(phoneShopDB).find(key => 
+    phoneShopDB[key].owner === playerName || phoneShopDB[key].owner === "{{user}}"
+);
     const myShopData = phoneShopDB[myShopKey] || { rating: 0, reviews: [] };
 
     // 2. 调用动态排名算法
@@ -12235,7 +12237,7 @@ async function submitReview() {
         if (window.TavernHelper && window.TavernHelper.createChatMessages) {
             let actionDesc = currentCommentContext === 'create-post' ? "发布了新帖" : "发表了评论";
             let locationDesc = currentCommentContext === 'shop' ? `店铺[${currentCommentShop}]` : "超话论坛";
-            const tavernMsg = `[手机动作] {{user}}以【${senderName}】身份，在手机【${locationDesc}】${actionDesc}内容如下：“${finalMsg}”`;
+            const tavernMsg = `[手机动作] ${playerName} 以【${senderName}】身份，在手机【${locationDesc}】${actionDesc}内容如下：“${finalMsg}”`;
             queueTavernMessage(tavernMsg);
         }
 
