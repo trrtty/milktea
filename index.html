@@ -5971,6 +5971,7 @@ function updateSyncButtonUI() {
     }
 }
 // ================= 全局变量源 (完全动态解析) ================= 
+// ================= 全局变量源 (完全动态解析，移除宏) ================= 
 let shopConfig = {};
 let appSettings = { drinkBackground: null, activeScene: null, pendingScenes: [] };
 let unlockedIngredients = {};
@@ -5984,10 +5985,8 @@ let matchResultsDB = {};
 let phoneShopDB = {};
 let phoneForumDB = {};
 let worldConfig = { year: "2026", season: "春", time: "白天", weather: "晴" };
-let dialogData = []; 
-
-// 临时调饮数据 (精修页使用)
-let tempDrinkStats = {};
+let dialogData = []; // 剧情数据
+let tempDrinkStats = {}; // 研发临时数据
 
 let isSubmittingTask = false; // 是否处于任务提交模式
       let selectedTaskDrinkKey = null; // 当前选中的配方 Key
@@ -7920,152 +7919,102 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
 }
 
 // --- 强化版：全能初始化与场景恢复系统 ---
-/* --- 核心初始化与自动同步系统 --- */
+async function init() {
+    console.log("🚀 正在初始化托管版经营系统...");
 
-/**
- * 界面核心初始化函数
- * 负责：拉取最新的 MVU 经营数据、解析最新楼层的剧情 JSON、刷新所有 UI 组件
- */
- async function init() {
-    console.log("🔄 正在同步云端数据并刷新界面...");
+    // 1. 设置基础 UI 缩放
+    setScale();
+    initForumCleanupUI();
 
-    // 1. 【数据层】等待并解析 MVU 全局经营数据
+    // 2. 等待并解析 MVU 数据
     try {
         await waitGlobalInitialized("Mvu");
         
-        // 获取当前 HTML 挂件所在楼层的数据快照
-        const variables = Mvu.getMvuData({ type: 'message', message_id: getCurrentMessageId() });
+        // 动态获取当前楼层 ID 并读取变量
+        const mid = getCurrentMessageId(); 
+        const variables = Mvu.getMvuData({ type: 'message', message_id: mid });
         const sd = _.get(variables, 'stat_data');
 
         if (sd) {
-            // 将云端持久化数据同步到内存变量
-            if (sd.shopConfig) shopConfig = sd.shopConfig;
-            if (sd.appSettings) appSettings = sd.appSettings;
-            if (sd.unlockedIngredients) unlockedIngredients = sd.unlockedIngredients;
-            if (sd.customersDB) customersDB = sd.customersDB;
-            if (sd.shopMenu) shopMenu = sd.shopMenu;
-            if (sd.shopFinancials) shopFinancials = sd.shopFinancials;
-            if (sd.phoneChatDB) phoneChatDB = sd.phoneChatDB;
-            if (sd.phoneTaskDB) phoneTaskDB = sd.phoneTaskDB;
-            if (sd.phoneMatchDB) phoneMatchDB = sd.phoneMatchDB;
-            if (sd.matchResultsDB) matchResultsDB = sd.matchResultsDB;
-            if (sd.phoneShopDB) phoneShopDB = sd.phoneShopDB;
-            if (sd.phoneForumDB) phoneForumDB = sd.phoneForumDB;
-            if (sd.worldConfig) worldConfig = sd.worldConfig;
-            
-            // 特殊逻辑：恢复研发中的临时状态
-            if (sd.tempDrinkStats) {
-                const localBackup = JSON.parse(localStorage.getItem('milktea_dev_backup') || '{}');
-                editorState.tempStats = {
-                    ...sd.tempDrinkStats,
-                    code: sd.tempDrinkStats.code || localBackup.code || null,
-                    ingredients: (sd.tempDrinkStats.ingredients?.length > 0) ? sd.tempDrinkStats.ingredients : (localBackup.ingredients || [])
-                };
-            }
-            console.log("✅ 经营数据同步完成");
+            shopConfig = sd.shopConfig || shopConfig;
+            appSettings = sd.appSettings || appSettings;
+            unlockedIngredients = sd.unlockedIngredients || unlockedIngredients;
+            customersDB = sd.customersDB || customersDB;
+            shopMenu = sd.shopMenu || shopMenu;
+            shopFinancials = sd.shopFinancials || shopFinancials;
+            phoneChatDB = sd.phoneChatDB || phoneChatDB;
+            phoneTaskDB = sd.phoneTaskDB || phoneTaskDB;
+            phoneMatchDB = sd.phoneMatchDB || phoneMatchDB;
+            matchResultsDB = sd.matchResultsDB || matchResultsDB;
+            phoneShopDB = sd.phoneShopDB || phoneShopDB;
+            phoneForumDB = sd.phoneForumDB || phoneForumDB;
+            worldConfig = sd.worldConfig || worldConfig;
+            if (sd.tempDrinkStats) editorState.tempStats = sd.tempDrinkStats;
+            console.log("✅ 经营数据已从 MVU 动态载入");
         }
-    } catch (e) {
-        console.warn("⚠️ MVU 数据拉取失败，可能由于尚未初始化或网络延迟:", e);
-    }
+    } catch (e) { console.error("❌ MVU 数据同步失败:", e); }
 
-    // 2. 【剧情层】从当前楼层消息提取 <dialogtext>
+    // 3. 【核心修复】从本楼层提取剧情对白 (处理注释和 JSON 截取)
     try {
-        const currentId = getCurrentMessageId();
-        const msgs = TavernHelper.getChatMessages(currentId);
+        const mid = getCurrentMessageId();
+        const msgs = TavernHelper.getChatMessages(mid); // 只看本楼层
 
         if (msgs && msgs.length > 0) {
             const msgObj = msgs[0];
             if (msgObj && msgObj.message) {
-                // 正则匹配自定义标签，支持多行和 HTML 注释清洗（用 RegExp 避免 HTML 内嵌 JS 将 <tag> 误解析）
-                const regex = new RegExp("<dialogtext>\\s*([\\s\\S]*?)\\s*</dialogtext>", "g");
+                // 正则捕获所有的标签块 (g 模式)
+                const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/g;
                 const allMatches = Array.from(msgObj.message.matchAll(regex));
                 
                 if (allMatches.length > 0) {
+                    // 取本楼层最后一个标签块
                     let rawContent = allMatches[allMatches.length - 1][1].trim();
-                    rawContent = rawContent.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), ""); // 移除注释
                     
-                    const startBracket = rawContent.indexOf("[");
-                    const endBracket = rawContent.lastIndexOf("]");
+                    // --- 数据清洗逻辑 ---
+                    // A. 剔除所有 HTML 注释 <!-- ... -->
+                    rawContent = rawContent.replace(/<!--[\s\S]*?-->/g, "");
                     
-                    if (startBracket !== -1 && endBracket !== -1) {
-                        const jsonString = rawContent.substring(startBracket, endBracket + 1);
+                    // B. 精准定位 [ 到 ] 之间的数组部分 (解决注释外废话问题)
+                    const start = rawContent.indexOf('[');
+                    const end = rawContent.lastIndexOf(']');
+                    
+                    if (start !== -1 && end !== -1) {
+                        const jsonStr = rawContent.substring(start, end + 1);
                         try {
-                            const parsed = JSON.parse(jsonString);
-                            if (Array.isArray(parsed)) {
-                                // 如果剧情有变动（长度不同或首条内容不同），则重置索引并加载新剧情
-                                if (dialogData.length !== parsed.length || (parsed[0] && parsed[0].text !== dialogData[0]?.text)) {
-                                    dialogData = parsed;
-                                    dialogIndex = -1; // 重置进度，等待下一次 nextDialog 调用
-                                    console.log(`🎬 载入新剧情片段，条数: ${dialogData.length}`);
-                                }
-                            }
-                        } catch (jsonErr) { console.error("❌ JSON 剧情解析格式错误"); }
+                            dialogData = JSON.parse(jsonStr);
+                            console.log("🎬 剧情对白提取成功，条数:", dialogData.length);
+                        } catch (jsonE) { console.error("❌ JSON 语法错误，请检查 AI 输出:", jsonE); }
                     }
                 }
             }
         }
-    } catch (e) { console.error("❌ 消息流读取异常", e); }
+    } catch (e) { console.error("剧情提取异常:", e); }
 
-    // 3. 【渲染层】重绘关键 UI 模块
-    wakeUpMainHallUI();        // 刷新大堂环境
-    renderCustomerList();     // 刷新顾客列表
-    initShowcaseKey();        // 确定今日主推
-    updateNarrativeModeUI();  // 同步叙事模式状态
-    
-    // 4. 【任务层】处理待办场景队列（如比赛结果自动弹出）
+    // 4. 执行 UI 刷新
+    wakeUpMainHallUI(); 
+    renderCustomerList();
+    initShowcaseKey();
+    updateNarrativeModeUI();
+
+    // 5. 场景队列恢复处理
     await processSceneQueue(); 
-
-    // 如果没有任何弹窗打开，默认维持在手机桌面或指定初始页
-    const currentActiveLayer = document.querySelector('.popup-layer[style*="display: flex"]');
-    if (!currentActiveLayer) {
-        // 如果是初始化且没有任何层打开，进入手机桌面
-        if (typeof navigateToPhone === 'function') navigateToPhone("home");
-    }
+    
+    // 默认打开手机主页（如果没有特殊场景）
+    const isAnyLayerOpen = Array.from(document.querySelectorAll('.popup-layer')).some(l => l.style.display === 'flex');
+    if (!isAnyLayerOpen) navigateToPhone("home");
 }
 
-/**
- * 一次性 UI 事件绑定 (非重复调用)
- */
-function setupEventListeners() {
-    // AI 自动命名开关
-    const aiToggle = document.getElementById("ai-gen-toggle");
-    if (aiToggle) {
-        const savedAiState = localStorage.getItem("milktea_ai_gen_enabled");
-        aiToggle.checked = (savedAiState === null) ? true : (savedAiState === "true");
-        aiToggle.onchange = () => { localStorage.setItem("milktea_ai_gen_enabled", aiToggle.checked); };
+// --- 立即执行初始化 ---
+init();
+
+// --- 监听酒馆事件：当 AI 重新生成或发送消息时，自动刷新数据和剧情 ---
+eventOn(tavern_events.MESSAGE_RECEIVED, (mid, type) => {
+    // 仅在当前楼层相关或生成结束时触发 init
+    if (type === 'normal' || type === 'regenerate') {
+        console.log("🔔 检测到消息变动，执行 init() 刷新剧情...");
+        init(); 
     }
-
-    // 论坛自动清理设置初始化
-    if (typeof initForumCleanupUI === 'function') initForumCleanupUI();
-
-    // 响应式缩放校准
-    if (typeof setScale === 'function') {
-        window.addEventListener("resize", setScale);
-        setScale();
-    }
-
-    // --- 【核心监听器】 ---
-    // 当酒馆收到新消息（AI回复）时，自动触发 init 刷新数据和剧情
-    if (window.TavernHelper) {
-        TavernHelper.eventOn(TavernHelper.tavern_events.MESSAGE_RECEIVED, (id) => {
-            console.log(`📩 监听到新消息流 [Floor: ${id}]，开始同步...`);
-            init(); 
-        });
-        
-        // 监听聊天切换，确保在不同角色卡/聊天文件间正确重置
-        TavernHelper.eventOn(TavernHelper.tavern_events.CHAT_CHANGED, () => {
-            dialogIndex = -1;
-            dialogData = [];
-            init();
-        });
-    }
-}
-
-// 脚本入口
-(async function() {
-    setupEventListeners();
-    await init();
-})();
+});
 
 
 let editorState = {
