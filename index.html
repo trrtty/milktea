@@ -18,13 +18,21 @@
     />
 
     <style>
+
       body {
+        margin: 0;
+        padding: 0;
         width: 736px;
         height: 1312px;
         font-family: "Noto Sans SC", sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none; /* 兼容 Chrome/Safari */
+        cursor: default; /* 强制默认为箭头，而不是文字输入光标 */
       }
-
-
 
       #editor-layer-list {
     display: flex;
@@ -3647,18 +3655,7 @@
       }
 
       /* 基础样式 */
-      body {
-        margin: 0;
-        padding: 0;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
-        overflow: hidden;
-        user-select: none;
-        -webkit-user-select: none; /* 兼容 Chrome/Safari */
-        cursor: default; /* 强制默认为箭头，而不是文字输入光标 */
-      }
+
 
       .scale-container {
         transform-origin: center center;
