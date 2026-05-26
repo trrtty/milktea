@@ -1,4 +1,5 @@
 
+
 <!doctype html>
 <html>
   <head>
@@ -5970,8 +5971,7 @@ function updateSyncButtonUI() {
         alert("同步过程中出现错误。");
     }
 }
-// ================= 全局变量源 (完全动态解析) ================= 
-// ================= 全局变量源 (完全动态解析，移除宏) ================= 
+let playerName = "店长"; // 默认兜底名称 
 let shopConfig = {};
 let appSettings = { drinkBackground: null, activeScene: null, pendingScenes: [] };
 let unlockedIngredients = {};
@@ -7929,7 +7929,14 @@ async function init() {
     // 2. 等待并解析 MVU 数据
     try {
         await waitGlobalInitialized("Mvu");
-        
+        // 动态获取当前酒馆里设置的玩家名称
+if (typeof SillyTavern !== 'undefined' && SillyTavern.name1) {
+    playerName = SillyTavern.name1;
+} else {
+    // 另一种尝试：通过宏函数手动解析一次
+    playerName = substitudeMacros('{{user}}');
+}
+console.log("👤 玩家身份已识别:", playerName);
         // 动态获取当前楼层 ID 并读取变量
         const mid = getCurrentMessageId(); 
         const variables = Mvu.getMvuData({ type: 'message', message_id: mid });
@@ -10611,7 +10618,7 @@ function renderSimMatchList() {
 
     // 1. 过滤并获取前 9 名竞争对手（不含玩家）
     const competitors = Object.entries(phoneShopDB)
-        .filter(([name, data]) => data.owner !== "{{user}}")
+        .filter(([name, data]) => data.owner !== playerName)
         .map(([name, data]) => ({ name, ...data }))
         .sort((a, b) => b.rating - a.rating)
         .slice(0, 9);
@@ -11843,7 +11850,7 @@ function viewPastMatchResult(matchTitle) {
     const allShops = Object.entries(phoneShopDB).map(([name, data]) => ({
         name: name,
         rating: data.rating || 0,
-        isPlayer: (data.owner === "{{user}}")
+        isPlayer: (data.owner === playerName)
     }));
     
     allShops.sort((a, b) => b.rating - a.rating);
@@ -12141,7 +12148,7 @@ async function submitReview() {
         return;
     }
 
-    const senderName = isCommentOwner ? `${shopConfig.identity.name} (店长)` : anonNick;
+    const senderName = isCommentOwner ? `${shopConfig.identity.name} (${playerName})` : anonNick;
     const finalMsg = currentReplyTarget ? `@${currentReplyTarget} ${userTypedText}` : userTypedText;
 
     try {
@@ -12701,8 +12708,7 @@ function syncStoryUI(data) {
     if (data.season || data.time || data.weather) updateEnvironmentUI(data);
 
     let speakerName = data.name;
-    const isSpecial = (speakerName === "旁白" || speakerName === "系统" || speakerName === "{{user}}");
-
+    const isSpecial = (speakerName === "旁白" || speakerName === "系统" || speakerName === playerName );
     // --- 【Bug 修复开始】 ---
     if (!isSpecial) {
         let targetId = data.id;
