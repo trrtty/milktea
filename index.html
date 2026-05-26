@@ -5930,49 +5930,62 @@ function updateSyncButtonUI() {
 /**
  * 核心：一次性冲刷所有缓存消息并同步给 AI
  */
+/**
+ * 核心：静默同步店长决策到酒馆，不触发 UI 滚动
+ */
  async function flushTavernBuffer() {
     if (tavernMessageBuffer.length === 0) return;
 
-    // 1. 开启 Loading
+    // 1. 显示加载遮罩，锁定交互
     const loader = document.getElementById("devLoading");
     if (loader) {
         loader.style.display = "flex";
-        document.querySelector("#devLoading .loading-text").innerText = "正在同步店长决策...";
+        document.querySelector("#devLoading .loading-text").innerText = "正在通过加密频道传输决策...";
     }
 
-    // --- 【核心修改：格式化消息】 ---
-    // 根据当前挂件选中的模式确定抬头
+    // 构建提示词
     let modeTag = "【" + (currentNarrativeMode === 'novel' ? "小说" : "对话") + "模式】";
-    
-    // 构建最终文本：抬头 + 总表头 + 每一个决策内容（决策之间用换行隔开，不再加数字序号）
     const combinedAction = modeTag + "【店长决策汇总】：\n\n" + tavernMessageBuffer.join("\n\n");
 
     try {
-        if (window.TavernHelper && window.TavernHelper.createChatMessages) {
-            await window.TavernHelper.createChatMessages(
-                [{ role: 'user', message: combinedAction }],
-                { refresh: 'affected' }
-            );
-            if (window.TavernHelper.triggerSlash) {
-                await window.TavernHelper.triggerSlash('/trigger');
-            }
-        }
-        
-        // 2. 清空缓存
+        // --- 步骤 2：使用 createChatMessages 创建 USER 消息 ---
+        // 关键点：{ refresh: 'none' } 确保酒馆界面不滚动、不重新渲染
+        await TavernHelper.createChatMessages(
+            [{ role: 'user', message: combinedAction }],
+            { refresh: 'none' } 
+        );
+
+        // 清空本地缓存
         tavernMessageBuffer = [];
         updateSyncButtonUI();
+
+        // --- 步骤 3：调用生成函数 ---
+        // 我们不直接调用 generate，而是通过 slash 触发，
+        // 这样可以方便后续通过事件监听捕获结果
+        await TavernHelper.triggerSlash('/generate');
+
+        // --- 步骤 4：监听生成结束事件 ---
+        // 我们需要等待 LLM 回复完成
+        const onMessageReceived = async (mid, type) => {
+            // 我们只关注完成后的消息 (normal 或被截断的回复)
+            if (type === 'normal') {
+                // 移除监听器，防止多次触发
+                eventOff(tavern_events.MESSAGE_RECEIVED, onMessageReceived);
+                
+                // --- 步骤 5：处理生成的助手消息 ---
+                await handleLLMResponse(mid);
+            }
+        };
         
-        // 3. 进入场景处理器
-        setTimeout(async () => {
-            await processSceneQueue();
-        }, 1000);
+        eventOn(tavern_events.MESSAGE_RECEIVED, onMessageReceived);
 
     } catch (e) {
-        console.error("同步失败:", e);
+        console.error("同步链路异常:", e);
         if (loader) loader.style.display = "none";
-        alert("同步过程中出现错误。");
     }
 }
+
+
 let playerName = "店长"; // 默认兜底名称 
 let shopConfig = {};
 let appSettings = { drinkBackground: null, activeScene: null, pendingScenes: [] };
@@ -7923,6 +7936,22 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
 // --- 强化版：全能初始化与场景恢复系统 ---
 async function init() {
     console.log("🚀 正在初始化托管版经营系统...");
+
+    // 1. 【恢复功能】：AI 协助命名勾选框的记忆逻辑
+    const aiToggle = document.getElementById("ai-gen-toggle");
+    if (aiToggle) {
+        const savedAiState = localStorage.getItem("milktea_ai_gen_enabled");
+        // 如果是第一次运行(null)，默认开启；否则读取记录
+        aiToggle.checked = (savedAiState === null) ? true : (savedAiState === "true");
+        
+        // 绑定点击事件，实时保存
+        aiToggle.onchange = () => { 
+            localStorage.setItem("milktea_ai_gen_enabled", aiToggle.checked);
+            console.log("⚙️ AI 协助命名模式已切换:", aiToggle.checked);
+        };
+    }
+
+
 
     // 1. 设置基础 UI 缩放
     setScale();
@@ -13158,6 +13187,82 @@ function selectLayer(uid) {
 function getSelectedLayer() {
     // 通过 uid 寻找对象
     return editorState.layers.find((l) => l.uid === editorState.selectedId);
+}
+
+
+async function handleLLMResponse(messageId) {
+    try {
+        // 获取刚刚生成的最后一条消息
+        const msgs = TavernHelper.getChatMessages(messageId);
+        if (!msgs || msgs.length === 0) return;
+
+        const rawText = msgs[0].message;
+
+        // --- 步骤 6：解析变量与剧情 ---
+        // 这里复用你 init 里的逻辑，但我们是在生成瞬间执行
+        const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/g;
+        const matches = Array.from(rawText.matchAll(regex));
+        
+        if (matches.length > 0) {
+            let content = matches[matches.length - 1][1].trim();
+            content = content.replace(/<!--[\s\S]*?-->/g, ""); // 剔除注释
+            
+            const start = content.indexOf('[');
+            const end = content.lastIndexOf(']');
+            if (start !== -1 && end !== -1) {
+                const jsonStr = content.substring(start, end + 1);
+                dialogData = JSON.parse(jsonStr);
+                dialogIndex = -1; // 重置剧情进度
+                
+                console.log("🎬 剧情捕获成功，准备播放...");
+            }
+        }
+
+        // --- 步骤 7：静默更新游戏状态 ---
+        // 此时 MVU 应该已经被酒馆自动更新（因为生成结束会自动同步变量）
+        // 如果没有，我们手动触发一次数据重载
+        await reloadGameData(messageId);
+
+        // --- 步骤 8：清洗酒馆显示 (可选) ---
+        // 如果你不希望玩家在聊天记录里看到那一长串 JSON，
+        // 可以把消息静默替换成一句简短的剧情摘要
+        /*
+        await TavernHelper.editChatMessage(messageId, {
+            message: "（店长做出了决策，故事正在继续...）"
+        }, { refresh: 'none' });
+        */
+
+        // 关闭加载层，开始播放剧情
+        document.getElementById("devLoading").style.display = "none";
+        
+        // 自动触发第一条对白
+        nextDialog();
+
+    } catch (e) {
+        console.error("解析回复失败:", e);
+        document.getElementById("devLoading").style.display = "none";
+    }
+}
+
+async function reloadGameData(mid) {
+    // 强制从最新的 MVU 楼层读取数据
+    const variables = Mvu.getMvuData({ type: 'message', message_id: mid });
+    const sd = _.get(variables, 'stat_data');
+
+    if (sd) {
+        // 更新本地内存数据库
+        if (sd.shopFinancials) shopFinancials = sd.shopFinancials;
+        if (sd.unlockedIngredients) unlockedIngredients = sd.unlockedIngredients;
+        if (sd.shopMenu) shopMenu = sd.shopMenu;
+        if (sd.phoneShopDB) phoneShopDB = sd.phoneShopDB;
+        if (sd.worldConfig) worldConfig = sd.worldConfig;
+        
+        // 刷新 UI
+        syncGlobalBalance();
+        updateEnvironmentUI(worldConfig);
+        renderCustomerList();
+        console.log("🔄 游戏全局数据已同步至最新状态");
+    }
 }
 </script>
   </body>
