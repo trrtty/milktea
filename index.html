@@ -5887,7 +5887,23 @@
 
     <script>
       // 定义全局输出函数，确保同时在弹窗和控制台显示
-
+      const TavernHelper = {
+    // 步骤 2 & 6 使用：创建消息
+    async createChatMessages(msgs, ops) {
+        return await window.createChatMessages(msgs, ops);
+    },
+    // 步骤 3 使用：静默获取 AI 文本
+    async generate(args) {
+        if (typeof window.generate !== 'function') {
+            console.error("❌ 没找到酒馆的 generate 函数");
+            return "";
+        }
+        return await window.generate({
+            user_input: args.user_input,
+            should_silence: true  // 关键：不让酒馆自己创建气泡
+        });
+    }
+};
       /* --- 1. 基础配置与全局变量 --- */
       const nobgBaseUrl =
         "https://raw.githubusercontent.com/trrtty/milktea/refs/heads/main/consumers/nobg/";
@@ -5939,50 +5955,68 @@ function updateSyncButtonUI() {
 /**
  * 核心：静默同步店长决策到酒馆
  */
+/**
+ * 核心：7步静默执行流实现
+ */
+/**
+ * 奶茶店专属：7步静默执行流
+ */
+/**
+ * 核心：7步静默同步流 (奶茶店本土化版)
+ */
  async function flushTavernBuffer() {
     if (tavernMessageBuffer.length === 0) return;
 
-    // 1. 显示加载遮罩，防止重复操作
-    const loader = document.getElementById("devLoading");
-    if (loader) {
-        loader.style.display = "flex";
-        document.querySelector("#devLoading .loading-text").innerText = "正在通过底层协议传输决策...";
-    }
-
-    // 2. 构建消息内容
-    let modeTag = "【" + (currentNarrativeMode === 'novel' ? "小说" : "对话") + "模式】";
-    const combinedAction = modeTag + "【店长决策汇总】：\n\n" + tavernMessageBuffer.join("\n\n");
+    // 步骤 1: 构建提示词 (省略 UI 代码...)
+    // ... 
+    isStoryFinished = true;
+    window.isManualFlowActive = true;
 
     try {
-        // --- 步骤：静默创建 USER 消息 ---
-        // { refresh: 'none' } 是关键：它将消息存入数据库，但酒馆 UI 不会跳动
-        await TavernHelper.createChatMessages(
-            [{ role: 'user', message: combinedAction }],
-            { refresh: 'none' } 
+        // 步骤 2: 静默创建 User 消息
+        await TavernHelper.createChatMessages([{ role: 'user', message: promptText }], { refresh: 'none' });
+
+        // 步骤 3: 调用 generate 生成回复
+        const aiRawResponse = await TavernHelper.generate({ user_input: promptText });
+        
+        // --- 步骤 4: 统一解析 (调用新工具函数) ---
+        const newDialogData = parseDialogTextFromRaw(aiRawResponse);
+
+        // 步骤 5: 解析变量命令
+        const currentData = Mvu.getMvuData({ type: 'message', message_id: getCurrentMessageId() });
+        let updatedStatData = currentData;
+        if (typeof Mvu?.parseMessage === 'function') {
+            updatedStatData = await Mvu.parseMessage(aiRawResponse, currentData || { stat_data: {} }) || currentData;
+        }
+
+        // 步骤 6: 静默创建 Assistant 楼层
+        const assistantMid = await TavernHelper.createChatMessages(
+            [{ role: 'assistant', message: aiRawResponse, data: updatedStatData || void 0 }],
+            { refresh: 'none' }
         );
 
-        // 3. 清空本地缓存缓冲区
+        // --- 步骤 7: 刷新前端显示 ---
+        if (newDialogData.length > 0) {
+            dialogData = newDialogData;
+            dialogIndex = -1;
+            isStoryFinished = false; 
+            // 刷新本地数值
+            await reloadGameData(assistantMid);
+            // 关闭加载并开始
+            if (loader) loader.style.display = "none";
+            nextDialog(); 
+        }
+
+        // 清理缓冲区
         tavernMessageBuffer = [];
         updateSyncButtonUI();
 
-        // 4. 触发 AI 生成
-        // 尝试触发生成指令
-        await TavernHelper.triggerSlash('/trigger');
-
-        // 5. 设置超时保护，30秒后强制关闭 Loading 防止链路断开
-        setTimeout(() => {
-            if (loader && loader.style.display === "flex") {
-                loader.style.display = "none";
-                console.warn("⚠️ 同步请求响应超时");
-            }
-        }, 30000);
-
     } catch (e) {
-        console.error("❌ 静默同步失败:", e);
-        if (loader) loader.style.display = "none";
+        // ... 错误处理
+    } finally {
+        window.isManualFlowActive = false;
     }
 }
-
 let playerName = "店长"; // 默认兜底名称 
 let shopConfig = {};
 let appSettings = { drinkBackground: null, activeScene: null, pendingScenes: [] };
@@ -7929,7 +7963,34 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
         }
     });
 }
-
+/**
+ * 统一解析器：从原始文本中提取最新的剧情 JSON
+ */
+ function parseDialogTextFromRaw(rawText) {
+    if (!rawText) return [];
+    
+    // 使用 g 模式匹配所有块，因为 AI 有时会复读之前的标签，我们要取最后一个
+    const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/g;
+    const allMatches = Array.from(rawText.matchAll(regex));
+    
+    if (allMatches.length > 0) {
+        // 取最后一个匹配项
+        let content = allMatches[allMatches.length - 1][1].trim();
+        rawContent = rawContent.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), ""); // 移除注释
+        
+        const startBracket = rawContent.indexOf("[");
+        const endBracket = rawContent.lastIndexOf("]");
+                    
+        if (start !== -1 && end !== -1) {
+            try {
+                return JSON.parse(content.substring(start, end + 1));
+            } catch (e) {
+                console.error("❌ 剧情 JSON 解析失败:", e);
+            }
+        }
+    }
+    return [];
+}
 // --- 强化版：全能初始化与场景恢复系统 ---
 async function init() {
     console.log("🚀 正在初始化托管版经营系统...");
@@ -13271,33 +13332,18 @@ async function reloadGameData(mid) {
  * 核心监听：自动化链路
  */
  function initAutoDialogLoader() {
-    if (typeof eventOn !== 'undefined' && typeof tavern_events !== 'undefined') {
-        
-        // 监听新消息：重点是捕获 type === 'normal' (生成完全结束)
-        eventOn(tavern_events.MESSAGE_RECEIVED, async (mid, type) => {
-            console.log(`🔔 收到消息事件: ID=${mid}, Type=${type}`);
-            
-            if (type === 'normal') {
-                // 检查是否已经是处理过的消息，防止循环触发
-                if (window.lastProcessedId === mid) return;
-                window.lastProcessedId = mid;
+    eventOn(tavern_events.MESSAGE_RECEIVED, async (mid, type) => {
+        // 如果是 flushTavernBuffer 正在工作，我们直接无视这个事件
+        if (isStoryFinished) return; 
 
-                // 执行加载逻辑
-                await handleLLMResponse(mid);
-            }
-        });
-
-        // 监听聊天文件切换（重载、换人）
-        eventOn(tavern_events.CHAT_CHANGED, () => {
-            window.lastProcessedId = null;
-            // 这种情况下也可以尝试静默读取一次最后一句
-            setTimeout(async () => {
-                let msgs = TavernHelper.getChatMessages(-1, { role: 'assistant' });
-                if (msgs.length > 0) await handleLLMResponse(msgs[msgs.length - 1].message_id);
-            }, 500);
-        });
-    }
+        if (type === 'normal') {
+            if (window.lastProcessedId === mid) return;
+            window.lastProcessedId = mid;
+            await handleLLMResponse(mid);
+        }
+    });
 }
+
 // 补充这个工具函数
 async function loadLatestDialogFromChat() {
     let messages = TavernHelper.getChatMessages(-1, { role: 'assistant' });
