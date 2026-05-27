@@ -8018,29 +8018,29 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
  */
  function parseDialogTextFromRaw(rawText) {
     if (!rawText) return [];
+    // 1. 全局匹配所有 <dialogtext> 标签 (gi 表示全局且忽略大小写)
+    const regex = /<dialogtext>([\s\S]*?)<\/dialogtext>/gi;
+    const matches = Array.from(rawText.matchAll(regex));
     
-    // 使用 g 模式匹配所有块，因为 AI 有时会复读之前的标签，我们要取最后一个
-    const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/g;
-    const allMatches = Array.from(rawText.matchAll(regex));
+    if (matches.length === 0) return [];
+
+    // 2. 永远取最后一对匹配项
+    let content = matches[matches.length - 1][1].trim();
     
-    if (allMatches.length > 0) {
-        // 取最后一个匹配项
-        let content = allMatches[allMatches.length - 1][1].trim();
-        content = content.replace(/<!--[\s\S]*?-->/g, ""); // 剔除注释
-        
-        const start = content.indexOf('[');
-        const end = content.lastIndexOf(']');
-        if (start !== -1 && end !== -1) {
-            try {
-                return JSON.parse(content.substring(start, end + 1));
-            } catch (e) {
-                console.error("❌ 剧情 JSON 解析失败:", e);
-            }
+    // 3. 清理掉注释和废话，定位 JSON
+    content = content.replace(/<!--[\s\S]*?-->/g, ""); 
+    const start = content.indexOf('[');
+    const end = content.lastIndexOf(']');
+    
+    if (start !== -1 && end !== -1) {
+        try {
+            return JSON.parse(content.substring(start, end + 1));
+        } catch (e) {
+            console.error("❌ 剧情JSON解析失败:", e);
         }
     }
     return [];
 }
-
 async function syncLatestContent() {
     try {
         // 1. 获取全量 Assistant 消息，取最后 5 条进行扫描
@@ -8109,8 +8109,7 @@ if (typeof SillyTavern !== 'undefined' && SillyTavern.name1) {
 }
 console.log("👤 玩家身份已识别:", playerName);
         // 动态获取当前楼层 ID 并读取变量
-        const mid = getCurrentMessageId(); 
-        const variables = Mvu.getMvuData({ type: 'message', message_id: mid });
+        const variables = Mvu.getMvuData({ type: 'message', message_id: getLastMessageId() });
         const sd = _.get(variables, 'stat_data');
 
         if (sd) {
@@ -8130,6 +8129,25 @@ console.log("👤 玩家身份已识别:", playerName);
             if (sd.tempDrinkStats) editorState.tempStats = sd.tempDrinkStats;
             console.log("✅ 经营数据已从 MVU 动态载入");
         }
+
+
+                // 2. 【回溯逻辑】：寻找最近的有效剧情
+                let finalDialog = [];
+        // 获取最近的 10 条 AI 消息
+        const history = TavernHelper.getChatMessages(-1, { role: 'assistant' }).slice(-10);
+        
+        // 从最近的往回翻
+        for (let i = history.length - 1; i >= 0; i--) {
+            const parsed = parseDialogTextFromRaw(history[i].message);
+            if (parsed && parsed.length > 0) {
+                finalDialog = parsed;
+                console.log(`🎯 剧情找回成功！来自楼层: ${history[i].message_id}`);
+                break; 
+            }
+        }
+        
+        dialogData = finalDialog;
+        dialogIndex = -1; // 强制重置索引，让它重新显示当前章节的第一句
     } catch (e) { console.error("❌ MVU 数据同步失败:", e); }
 
     // 3. 【核心修复】从本楼层提取剧情对白 (处理注释和 JSON 截取)
