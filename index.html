@@ -13564,86 +13564,93 @@ function toggleFullScreen() {
 /**
  * 读档大厅：仿冥河系统全量扫描引擎
  */
+/**
+ * 读档大厅：全量深度扫描引擎 (增强版)
+ */
  async function renderArchiveList() {
     const container = document.getElementById("archive-list-container");
     if (!container) return;
 
-    container.innerHTML = `<div style="text-align:center; padding:50px; color:#deb887; font-size:24px;">⌛ 正在全量扫描历史记忆...</div>`;
+    container.innerHTML = `<div style="text-align:center; padding:50px; color:#deb887; font-size:24px;">⌛ 正在检索全量历史记忆...</div>`;
 
-    // 1. 获取酒馆所有消息 (-1 为全量)
-    const allMsgs = TavernHelper.getChatMessages(-1);
-    // 过滤出所有 AI 回复，且内容包含 <sum> 标签的消息
-    const assistantSumMsgs = allMsgs.filter(m => m.role === 'assistant' && m.message && m.message.includes('<sum>'));
+    // 1. 获取最后一楼的 ID
+    const lastMid = TavernHelper.getLastMessageId();
+    // 2. 关键修复：显式查询从 0 到最后一楼的所有消息，确保不漏掉旧楼层
+    const allMsgs = TavernHelper.getChatMessages(`0-${lastMid}`);
+    
+    console.log(`🔍 [深度扫描] 总消息数: ${allMsgs.length}，正在筛选 <sum> 标签...`);
+
+    // 3. 过滤出所有带 <sum> 标签的 AI 消息
+    const assistantSumMsgs = allMsgs.filter(m => 
+        m.role === 'assistant' && 
+        m.message && 
+        /<sum>[\s\S]*?<\/sum>/i.test(m.message)
+    );
 
     if (assistantSumMsgs.length === 0) {
-        container.innerHTML = `<div style="text-align:center; padding:50px; color:#999;">未在历史记录中发现 <sum> 摘要。</div>`;
+        container.innerHTML = `<div style="text-align:center; padding:50px; color:#999;">漫长的历史中未发现剧情摘要（<sum>）。</div>`;
         return;
     }
 
     let htmlBuffer = "";
     
-    // 2. 倒序遍历（最新的在前）
+    // 4. 倒序遍历（最新的在前）
     for (let i = assistantSumMsgs.length - 1; i >= 0; i--) {
         const msgObj = assistantSumMsgs[i];
         const mid = msgObj.message_id;
         const summary = parseSumFromRaw(msgObj.message);
 
-        // 3. 获取当前楼层变量
+        // 获取当前楼层的变量
         const curMvu = Mvu.getMvuData({ type: 'message', message_id: mid });
         const curSD = curMvu?.stat_data;
 
-        let statsHtml = `<div style="color:#ccc; font-style:italic;">该楼层未检测到数据快照</div>`;
+        let statsHtml = `<div style="color:#aaa; font-style:italic; font-size:14px; margin-top:10px;">该节点仅保存了对话，未记录经营数据</div>`;
 
         if (curSD) {
-            // 4. 寻找“上一个有效数据点”进行对比
+            // 5. 寻找“上一个带数据”的节点（用于比对中文名）
             let prevSD = null;
-            // 注意：这里要从原始 allMsgs 中往回找最近一个带 stat_data 的 AI 消息
-            const currentIndexInAll = allMsgs.findIndex(m => m.message_id === mid);
-            for (let j = currentIndexInAll - 1; j >= 0; j--) {
-                const pMvu = Mvu.getMvuData({ type: 'message', message_id: allMsgs[j].message_id });
-                if (allMsgs[j].role === 'assistant' && pMvu?.stat_data) {
+            // 在过滤后的数组中往回找
+            for (let j = i - 1; j >= 0; j--) {
+                const pMvu = Mvu.getMvuData({ type: 'message', message_id: assistantSumMsgs[j].message_id });
+                if (pMvu?.stat_data) {
                     prevSD = pMvu.stat_data;
                     break;
                 }
             }
 
-            // --- 核心：按中文 [名称] 计算新增 ---
+            // --- 核心逻辑：按中文 [name] 比对新增 ---
             const getNewNames = (curObj, prevObj) => {
                 if (!curObj) return [];
-                // 提取当前所有条目的 .name 属性 (配方库的 Key 直接就是名字)
-                const curNames = Object.values(curObj).map(item => item.name || "未知");
-                const prevNames = prevObj ? Object.values(prevObj).map(item => item.name || "未知") : [];
-                // 过滤出上一楼没有的名字
+                const curNames = Object.values(curObj).map(item => item.name).filter(Boolean);
+                const prevNames = prevObj ? Object.values(prevObj).map(item => item.name).filter(Boolean) : [];
                 return curNames.filter(n => !prevNames.includes(n));
             };
 
             const newIng = getNewNames(curSD.unlockedIngredients, prevSD?.unlockedIngredients);
             const newCust = getNewNames(curSD.customersDB, prevSD?.customersDB);
-            // 配方库特殊：它的 Key 本身就是中文名，所以直接 Object.keys 对比即可
+            // 配方库 Key 就是名字，直接对比 Key
             const curRecs = Object.keys(curSD.shopMenu || {});
             const prevRecs = prevSD ? Object.keys(prevSD.shopMenu || {}) : [];
             const newRec = curRecs.filter(r => !prevRecs.includes(r));
 
             statsHtml = `
-                <div style="display:grid; grid-template-columns:1fr; gap:5px; font-size:16px; color:#666; background:#fdfbf7; padding:10px; border-radius:10px; border:1px solid #eee;">
-                    <div style="display:flex; justify-content:between; font-weight:bold; margin-bottom:5px; color:#8b4513;">
-                        <span>💰 当前存款: ¥${curSD.shopFinancials?.currentBalance || 0}</span>
+                <div style="display:grid; grid-template-columns:1fr; gap:5px; font-size:16px; color:#666; background:#fdfbf7; padding:12px; border-radius:12px; border:1px solid #eee; margin-top:10px;">
+                    <div style="display:flex; justify-content:space-between; font-weight:bold; margin-bottom:5px; color:#8b4513; border-bottom:1px solid #f5f5f0; padding-bottom:5px;">
+                        <span>💰 历史存款: ¥${curSD.shopFinancials?.currentBalance || 0}</span>
+                        <span style="color:#deb887; font-size:14px;">#${mid}</span>
                     </div>
-                    <div><b style="color:#8fbc8f;">🆕 新原料:</b> ${newIng.length > 0 ? newIng.join('、') : '无'}</div>
+                    <div><b style="color:#8fbc8f;">🍏 新原料:</b> ${newIng.length > 0 ? newIng.join('、') : '无'}</div>
                     <div><b style="color:#deb887;">📖 新配方:</b> ${newRec.length > 0 ? newRec.join('、') : '无'}</div>
                     <div><b style="color:#ff6b81;">👥 新顾客:</b> ${newCust.length > 0 ? newCust.join('、') : '无'}</div>
                 </div>
             `;
         }
 
-        // 5. 组装卡片
+        // 6. 组装卡片
         htmlBuffer += `
-            <div class="dossier-card-fixed" onclick="confirmBranch(${mid}, '${summary.replace(/'/g, "\\'")}')"
-                 style="margin-bottom:20px; cursor:pointer; border:2px solid #deb887; padding:20px; background:#fff; position:relative;">
-                <div style="margin-bottom:8px;">
-                    <span style="background:#8b4513; color:#fff; padding:2px 8px; border-radius:4px; font-size:14px;">楼层 #${mid}</span>
-                </div>
-                <div style="font-size:24px; font-weight:900; color:#333; margin-bottom:15px; line-height:1.4;">
+            <div class="archive-card-item" onclick="confirmBranch(${mid}, '${summary.replace(/'/g, "\\'")}')"
+                 style="margin-bottom:20px; cursor:pointer; border:3px solid #deb887; padding:20px; background:#fff; border-radius:15px; box-shadow: 6px 6px 0 rgba(222,184,135,0.2); transition:0.2s;">
+                <div style="font-size:24px; font-weight:900; color:#333; line-height:1.4;">
                     “ ${summary} ”
                 </div>
                 ${statsHtml}
@@ -13652,8 +13659,8 @@ function toggleFullScreen() {
     }
 
     container.innerHTML = htmlBuffer;
+    console.log(`✅ [深度扫描] 完成，找到 ${assistantSumMsgs.length} 个存档点`);
 }
-
 /**
  * 摘要解析
  */
