@@ -5988,88 +5988,87 @@ function updateSyncButtonUI() {
 }
 
 
- async function flushTavernBuffer() {
+/**
+ * 强化版静默执行流：集成 7 步逻辑、错误回退与强制 UI 刷新
+ */
+async function flushTavernBuffer() {
+    // 检查缓冲区
     if (tavernMessageBuffer.length === 0) return;
 
+    // --- 步骤 1: 构建提示词 ---
     let modeTag = "【" + (currentNarrativeMode === 'novel' ? "小说" : "对话") + "模式】";
     const promptText = modeTag + "【店长决策汇总】：\n\n" + tavernMessageBuffer.join("\n\n");
 
+    // UI 反馈：显示加载中
     const loader = document.getElementById("devLoading");
     if (loader) {
         loader.style.display = "flex";
         document.querySelector("#devLoading .loading-text").innerText = "正在通过逻辑链路传输决策...";
     }
 
-    isStoryFinished = true; 
-    window.isManualFlowActive = true; 
-
-    let userMid = null; 
+    // --- 【修改点 A】：初始化流程锁 ---
+    isStoryFinished = true; // 锁定 UI 防止重复点击
+    window.isManualFlowActive = true; // 告知监听器：这是手动控制的流程，不要插手
+    let userMid = null;
 
     try {
-        
+        // --- 【修改点 B】：在创建消息前获取变量快照 (防止重roll时的 ID 偏移) ---
         const baseMid = TavernHelper.getLastMessageId();
         const currentData = Mvu.getMvuData({ type: 'message', message_id: baseMid });
-        console.log("📊 捕获当前经营快照，基准 ID:", baseMid);
 
+        // --- 步骤 2: 创建 USER 消息 (静默) ---
         await TavernHelper.createChatMessages(
             [{ role: 'user', message: promptText }],
             { refresh: 'none' }
         );
-        
-        userMid = TavernHelper.getLastMessageId(); // 记录新 User 楼层 ID
+        userMid = TavernHelper.getLastMessageId(); // 步骤 2 成功后立刻记下 ID，用于报错回滚
 
-        // --- 步骤 3: 调用 generate ---
+        // --- 步骤 3: 调用 generate 生成回复 ---
         const aiRawResponse = await TavernHelper.generate({ user_input: promptText });
-        // 【3. 修改：强化验证，若格式不对直接抛出错误进入 catch】
-        if (!aiRawResponse || !aiRawResponse.includes('<dialogtext>')) {
-            throw new Error("AI 返回格式不规范或内容为空");
-        }
-
-        const dialogRegex = new RegExp("<dialogtext>\\s*([\\s\\S]*?)\\s*</dialogtext>", "i");
-        const dialogMatch = aiRawResponse.match(dialogRegex);
         
+        // --- 步骤 4: 验证标签并提取内容 ---
+        // 【修改点 C】：使用统一解析函数，且若没拿到剧情，直接抛错进入 catch 触发回滚
         let newDialogData = parseDialogTextFromRaw(aiRawResponse);
-        if (dialogMatch) {
-            let jsonContent = dialogMatch[1].trim().replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
-            const start = jsonContent.indexOf("[");
-            const end = jsonContent.lastIndexOf("]");
-            if (start !== -1 && end !== -1) {
-                newDialogData = JSON.parse(jsonContent.substring(start, end + 1));
-            }
+        if (!newDialogData || newDialogData.length === 0) {
+            throw new Error("AI回复格式错误（未检测到有效剧情标签）");
         }
 
-        // 如果解析出来的剧情是空的，也视为失败
-        if (newDialogData.length === 0) throw new Error("未能解析到剧情数据");
-
+        // --- 步骤 5: 解析变量命令 (MVU) ---
         let updatedStatData = currentData;
         if (typeof Mvu?.parseMessage === 'function') {
             const parsedData = await Mvu.parseMessage(aiRawResponse, currentData || { stat_data: {} });
             if (parsedData) updatedStatData = parsedData;
         }
 
+        // --- 步骤 6: 创建 ASSISTANT 楼层消息 (静默) ---
         await TavernHelper.createChatMessages(
             [{ role: 'assistant', message: aiRawResponse, data: updatedStatData || void 0 }],
             { refresh: 'none' }
         );
-
-        // 【核心修复 3】：手动获取刚刚创建的 Assistant 消息 ID
+        
+        // 【修改点 D】：手动捕获并标记 Assistant ID，防止监听器二次触发
         const assistantMid = TavernHelper.getLastMessageId();
         window.lastProcessedId = assistantMid;
-        console.log("✅ 步骤6完成，新 Assistant ID:", assistantMid);
 
-        if (newDialogData.length > 0) {
-            dialogData = newDialogData;
-            dialogIndex = -1; 
-            isStoryFinished = false; 
-        }
+        // --- 步骤 7: 刷新前端显示 ---
+        dialogData = newDialogData; // 注入新剧情数组
+        dialogIndex = -1; // 重置剧情指针
 
+        // 【核心修改 E】：必须在 nextDialog() 之前解锁！
+        // 否则 nextDialog 内部的 if(isStoryFinished) 会导致函数直接 return，从而不显示文字
+        isStoryFinished = false; 
+
+        // 【修改点 F】：立即强制刷新本地 JS 的经营数据（金钱、库存等）
         await reloadGameData(assistantMid);
 
+        // 成功到达这一步，说明数据都稳了，才清空决策篮子
         tavernMessageBuffer = [];
         updateSyncButtonUI();
 
         if (loader) loader.style.display = "none";
-        console.log("✅ 7步同步流完成");
+        
+        // --- 强制开启新剧情的第一句 ---
+        console.log("🎬 步骤 7: 执行流程完毕，正在刷新剧情显示...");
         if (appSettings.pendingScenes && appSettings.pendingScenes.length > 0) {
             await processSceneQueue(); 
         } else {
@@ -6077,21 +6076,22 @@ function updateSyncButtonUI() {
         }
 
     } catch (e) {
-        console.error("❌ 流程失败，启动回退:", e);
-
-        // 【4. 新增：错误回退逻辑 - 物理删除 User 楼层】
+        console.error("❌ 静默流程崩溃:", e);
+        
+        // --- 【修改点 G】：错误回退机制 ---
+        // 删除刚才生成的 User 楼层，防止历史记录里出现一堆没回复的“决策汇总”
         if (userMid !== null) {
             await TavernHelper.deleteChatMessages([userMid]);
+            console.log("🧹 已物理回滚无效的 User 楼层:", userMid);
         }
-
+        
         if (loader) loader.style.display = "none";
-        isStoryFinished = false; // 解锁
+        isStoryFinished = false; // 出错也要解锁，允许玩家修改后重试
         showSysAlert("传输失败: " + e.message + "\n决策已保留，请尝试重新同步。");
     } finally {
         window.isManualFlowActive = false;
     }
 }
-
 let playerName = "店长"; // 默认兜底名称 
 let shopConfig = {};
 let appSettings = { drinkBackground: null, activeScene: null, pendingScenes: [] };
@@ -8052,19 +8052,19 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
  function parseDialogTextFromRaw(rawText) {
     if (!rawText) return [];
     
-    // 全局匹配标签
-    const regex = /<dialogtext>([\s\S]*?)<\/dialogtext>/gi;
+    // 全局匹配标签（用 RegExp 避免 HTML 内嵌 JS 将 <tag> 误解析）
+    const regex = new RegExp("<dialogtext>([\\s\\S]*?)</dialogtext>", "gi");
     const matches = Array.from(rawText.matchAll(regex));
     
     if (matches.length === 0) return [];
 
     // 取最后一对标签，清理注释
     let rawContent = matches[matches.length - 1][1].trim();
-    rawContent = rawContent.replace(/<!--[\s\S]*?-->/g, "");
+    rawContent = rawContent.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
     
     // 定位并解析 JSON
-    const start = rawContent.indexOf('[');
-    const end = rawContent.lastIndexOf(']');
+    const start = rawContent.indexOf("[");
+    const end = rawContent.lastIndexOf("]");
     
     if (start !== -1 && end !== -1) {
         try {
@@ -8194,7 +8194,7 @@ console.log("👤 玩家身份已识别:", playerName);
             const msgObj = msgs[0];
             if (msgObj && msgObj.message) {
                 // 正则捕获所有的标签块 (g 模式)
-                const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/g;
+                const regex = new RegExp("<dialogtext>\\s*([\\s\\S]*?)\\s*</dialogtext>", "g");
                 const allMatches = Array.from(msgObj.message.matchAll(regex));
                 
                 if (allMatches.length > 0) {
@@ -8203,11 +8203,11 @@ console.log("👤 玩家身份已识别:", playerName);
                     
                     // --- 数据清洗逻辑 ---
                     // A. 剔除所有 HTML 注释 <!-- ... -->
-                    rawContent = rawContent.replace(/<!--[\s\S]*?-->/g, "");
+                    rawContent = rawContent.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
                     
                     // B. 精准定位 [ 到 ] 之间的数组部分 (解决注释外废话问题)
-                    const start = rawContent.indexOf('[');
-                    const end = rawContent.lastIndexOf(']');
+                    const start = rawContent.indexOf("[");
+                    const end = rawContent.lastIndexOf("]");
                     
                     if (start !== -1 && end !== -1) {
                         const jsonStr = rawContent.substring(start, end + 1);
@@ -13404,16 +13404,16 @@ function getSelectedLayer() {
         const rawText = msgs[0].message || '';
 
         // --- 步骤：提取 <dialogtext> ---
-        const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/i;
+        const regex = new RegExp("<dialogtext>\\s*([\\s\\S]*?)\\s*</dialogtext>", "i");
         const match = rawText.match(regex);
         
         if (match) {
             let content = match[1].trim();
-            content = content.replace(/<!--[\s\S]*?-->/g, ""); // 剔除注释
+            content = content.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), ""); // 剔除注释
             
             // 提取 JSON 数组部分
-            const start = content.indexOf('[');
-            const end = content.lastIndexOf(']');
+            const start = content.indexOf("[");
+            const end = content.lastIndexOf("]");
             if (start !== -1 && end !== -1) {
                 const jsonStr = content.substring(start, end + 1);
                 
