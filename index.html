@@ -4,7 +4,7 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>奶茶店同层10界面</title>
+    <title>奶茶店同层5界面</title>
     <!-- 引入 Font Awesome 图标库 -->
     <link
       rel="stylesheet"
@@ -13356,16 +13356,46 @@ async function reloadGameData(mid) {
 
         if (sd) {
             // 批量同步本地内存数据库
+            // 1. 基础经营与配置
+            if (sd.shopConfig) shopConfig = sd.shopConfig;
             if (sd.shopFinancials) shopFinancials = sd.shopFinancials;
-            if (sd.unlockedIngredients) unlockedIngredients = sd.unlockedIngredients;
-            if (sd.shopMenu) shopMenu = sd.shopMenu;
-            if (sd.phoneShopDB) phoneShopDB = sd.phoneShopDB;
             if (sd.worldConfig) worldConfig = sd.worldConfig;
+            if (sd.appSettings) appSettings = sd.appSettings;
+
+            // 2. 核心数据库 (菜单与原料)
+            if (sd.shopMenu) shopMenu = sd.shopMenu;
+            if (sd.unlockedIngredients) unlockedIngredients = sd.unlockedIngredients;
             
-            // 刷新界面显示
-            syncGlobalBalance(); // 刷新金钱
-            updateEnvironmentUI(worldConfig); // 刷新环境/背景
-            renderCustomerList(); // 刷新顾客
+            // 3. 社交与任务数据库 (手机系统)
+            if (sd.customersDB) customersDB = sd.customersDB;     // 顾客好感度与资料
+            if (sd.phoneChatDB) phoneChatDB = sd.phoneChatDB;     // 聊天记录
+            if (sd.phoneTaskDB) phoneTaskDB = sd.phoneTaskDB;     // 委托任务
+            if (sd.phoneMatchDB) phoneMatchDB = sd.phoneMatchDB;   // 进行中的比赛
+            if (sd.matchResultsDB) matchResultsDB = sd.matchResultsDB; // 比赛结果历史
+            if (sd.phoneShopDB) phoneShopDB = sd.phoneShopDB;     // 大众点评数据
+            if (sd.phoneForumDB) phoneForumDB = sd.phoneForumDB
+            if (sd.tempDrinkStats) {
+                editorState.tempStats = sd.tempDrinkStats;
+                console.log("✨ 临时研发数据已更新（包括 AI 命名）:", sd.tempDrinkStats.name);
+            }
+            syncGlobalBalance();         // 刷新顶栏金钱
+            updateEnvironmentUI(worldConfig); // 刷新环境背景
+            renderShopNameUI();          // 刷新店名
+            renderCustomerList();        // 刷新顾客列表
+
+            if (document.getElementById('layer-phone').style.display === 'flex') {
+                const activePage = document.querySelector('.sim-page.active')?.id;
+                if (activePage === 'page-chat-list') renderSimChatList();
+                if (activePage === 'page-task') renderSimTaskList();
+                if (activePage === 'page-match') renderSimMatchList();
+                if (activePage === 'page-review') renderSimReviewList();
+                if (activePage === 'page-forum') renderForumList();
+            }
+            
+            // 如果管理界面开着，刷新数据
+            if (document.getElementById('layer-shop-admin').style.display === 'flex') {
+                renderShopAdmin();
+            }
             console.log("🔄 经营数据已根据 MVU 同步至最新");
         }
     } catch (e) {
