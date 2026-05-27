@@ -8059,56 +8059,107 @@ async function init() {
     }
 
 
+
+    // 1. 设置基础 UI 缩放
     setScale();
-    
+    initForumCleanupUI();
+    initAutoDialogLoader(); 
+    // 2. 等待并解析 MVU 数据
     try {
-        // 1. 获取当前最后一条消息的 ID
+        await waitGlobalInitialized("Mvu");
+        // 动态获取当前酒馆里设置的玩家名称
+if (typeof SillyTavern !== 'undefined' && SillyTavern.name1) {
+    playerName = SillyTavern.name1;
+} else {
+    // 另一种尝试：通过宏函数手动解析一次
+    playerName = substitudeMacros('{{user}}');
+}
+console.log("👤 玩家身份已识别:", playerName);
+        // 动态获取当前楼层 ID 并读取变量
         const mid = getCurrentMessageId(); 
-        if (mid === null || mid < 0) return;
+        const variables = Mvu.getMvuData({ type: 'message', message_id: mid });
+        const sd = _.get(variables, 'stat_data');
 
-        // 2. 核心：先从云端（MVU）同步所有变量到本地
-        await reloadGameData(mid); 
+        if (sd) {
+            shopConfig = sd.shopConfig || shopConfig;
+            appSettings = sd.appSettings || appSettings;
+            unlockedIngredients = sd.unlockedIngredients || unlockedIngredients;
+            customersDB = sd.customersDB || customersDB;
+            shopMenu = sd.shopMenu || shopMenu;
+            shopFinancials = sd.shopFinancials || shopFinancials;
+            phoneChatDB = sd.phoneChatDB || phoneChatDB;
+            phoneTaskDB = sd.phoneTaskDB || phoneTaskDB;
+            phoneMatchDB = sd.phoneMatchDB || phoneMatchDB;
+            matchResultsDB = sd.matchResultsDB || matchResultsDB;
+            phoneShopDB = sd.phoneShopDB || phoneShopDB;
+            phoneForumDB = sd.phoneForumDB || phoneForumDB;
+            worldConfig = sd.worldConfig || worldConfig;
+            if (sd.tempDrinkStats) editorState.tempStats = sd.tempDrinkStats;
+            console.log("✅ 经营数据已从 MVU 动态载入");
+        }
+    } catch (e) { console.error("❌ MVU 数据同步失败:", e); }
 
-        // 3. 核心：从历史记录中找回剧情 JSON
-        // 获取所有消息，查找最后一条 assistant 的消息
-        const chatHistory = TavernHelper.getChatMessages(-1, { role: 'assistant' });
-        if (chatHistory && chatHistory.length > 0) {
-            const lastAssistantMsg = chatHistory[chatHistory.length - 1];
-            const rawText = lastAssistantMsg.message || "";
-            
-            // 使用你之前的解析逻辑提取剧情
-            const recoveredDialog = parseDialogTextFromRaw(rawText);
-            if (recoveredDialog && recoveredDialog.length > 0) {
-                dialogData = recoveredDialog;
-                // 关键：刷新后我们通常停在剧情的第一句，或者最后一句
-                dialogIndex = 0; 
-                console.log("🎬 剧情已找回，条数:", dialogData.length);
+    // 3. 【核心修复】从本楼层提取剧情对白 (处理注释和 JSON 截取)
+    try {
+        const mid = getCurrentMessageId();
+        const msgs = TavernHelper.getChatMessages(mid); // 只看本楼层
+
+        if (msgs && msgs.length > 0) {
+            const msgObj = msgs[0];
+            if (msgObj && msgObj.message) {
+                // 正则捕获所有的标签块 (g 模式)
+                const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/g;
+                const allMatches = Array.from(msgObj.message.matchAll(regex));
+                
+                if (allMatches.length > 0) {
+                    // 取本楼层最后一个标签块
+                    let rawContent = allMatches[allMatches.length - 1][1].trim();
+                    
+                    // --- 数据清洗逻辑 ---
+                    // A. 剔除所有 HTML 注释 <!-- ... -->
+                    rawContent = rawContent.replace(/<!--[\s\S]*?-->/g, "");
+                    
+                    // B. 精准定位 [ 到 ] 之间的数组部分 (解决注释外废话问题)
+                    const start = rawContent.indexOf('[');
+                    const end = rawContent.lastIndexOf(']');
+                    
+                    if (start !== -1 && end !== -1) {
+                        const jsonStr = rawContent.substring(start, end + 1);
+                        try {
+                            dialogData = JSON.parse(jsonStr);
+                            console.log("🎬 剧情对白提取成功，条数:", dialogData.length);
+                        } catch (jsonE) { console.error("❌ JSON 语法错误，请检查 AI 输出:", jsonE); }
+                    }
+                }
             }
         }
+    } catch (e) { console.error("剧情提取异常:", e); }
 
-        // 4. 显式触发 UI 组件的“唤醒”
-        renderShopNameUI();
-        syncGlobalBalance();
-        updateEnvironmentUI(worldConfig); // 这里会修复左上角配置
-        renderCustomerList();
-        
-        // 5. 修复：如果当前停在比赛页面，显式刷新列表
-        if (document.getElementById('page-match').classList.contains('active')) {
-            switchMatchTab(currentMatchTab); // 重新触发列表渲染
-        }
+    // 4. 执行 UI 刷新
+    wakeUpMainHallUI(); 
+    renderCustomerList();
+    initShowcaseKey();
+    updateNarrativeModeUI();
 
-        // 6. 开启对话框显示
-        if (dialogData.length > 0) {
-            syncStoryUI(dialogData[dialogIndex]);
-        }
-
-        // 7. 处理场景队列（如精修界面恢复）
-        await processSceneQueue();
-
-    } catch (e) {
-        console.error("❌ 初始化恢复失败:", e);
-    }
+    // 5. 场景队列恢复处理
+    await processSceneQueue(); 
+    
+    // 默认打开手机主页（如果没有特殊场景）
+    const isAnyLayerOpen = Array.from(document.querySelectorAll('.popup-layer')).some(l => l.style.display === 'flex');
+    if (!isAnyLayerOpen) navigateToPhone("home");
 }
+
+// --- 立即执行初始化 ---
+init();
+
+// --- 监听酒馆事件：当 AI 重新生成或发送消息时，自动刷新数据和剧情 ---
+eventOn(tavern_events.MESSAGE_RECEIVED, (mid, type) => {
+    // 仅在当前楼层相关或生成结束时触发 init
+    if (type === 'normal' || type === 'regenerate') {
+        console.log("🔔 检测到消息变动，执行 init() 刷新剧情...");
+        init(); 
+    }
+});
 
 
 let editorState = {
@@ -12919,6 +12970,12 @@ async function saveShopDataToMvu() {
         mvuData.stat_data.shopMenu = shopMenu; 
         mvuData.stat_data.phoneForumDB = phoneForumDB;
         mvuData.stat_data.appSettings = appSettings;
+        mvuData.stat_data.worldConfig = worldConfig; // 确保环境也被存入
+        
+        // 【关键修复】：保存比赛结果数据库，否则刷新后会丢失
+        mvuData.stat_data.matchResultsDB = matchResultsDB; 
+        mvuData.stat_data.phoneMatchDB = phoneMatchDB;
+        mvuData.stat_data.phoneTaskDB = phoneTaskDB;
 
         // 2. 制作一个副本给 AI，删掉不需要的字段
         const menuAI = JSON.parse(JSON.stringify(shopMenu)); 
@@ -13297,34 +13354,61 @@ function getSelectedLayer() {
 /**
  * 强制从 MVU 刷新经营数值
  */
- async function reloadGameData(mid) {
+async function reloadGameData(mid) {
     try {
+        // 获取该楼层关联的变量快照
         const variables = Mvu.getMvuData({ type: 'message', message_id: mid });
         const sd = _.get(variables, 'stat_data');
 
         if (sd) {
-            // 同步所有数据库
-            if (sd.worldConfig) worldConfig = sd.worldConfig;
+            // 批量同步本地内存数据库
+            // 1. 基础经营与配置
+            if (sd.shopConfig) shopConfig = sd.shopConfig;
             if (sd.shopFinancials) shopFinancials = sd.shopFinancials;
-            if (sd.shopMenu) shopMenu = sd.shopMenu;
-            if (sd.matchResultsDB) matchResultsDB = sd.matchResultsDB; // 修复历史记录
-            if (sd.phoneTaskDB) phoneTaskDB = sd.phoneTaskDB;
-            if (sd.phoneMatchDB) phoneMatchDB = sd.phoneMatchDB;
-            if (sd.phoneShopDB) phoneShopDB = sd.phoneShopDB;
-            if (sd.phoneForumDB) phoneForumDB = sd.phoneForumDB;
+            if (sd.worldConfig) worldConfig = sd.worldConfig;
             if (sd.appSettings) appSettings = sd.appSettings;
-            if (sd.tempDrinkStats) editorState.tempStats = sd.tempDrinkStats;
 
-            // 必须立即调用的 UI 更新
-            syncGlobalBalance();
-            updateEnvironmentUI(worldConfig); // 修复刷新后环境不对
-            renderShopNameUI();
-            console.log("🔄 数据同步完成，当前环境:", worldConfig.season, worldConfig.time);
+            // 2. 核心数据库 (菜单与原料)
+            if (sd.shopMenu) shopMenu = sd.shopMenu;
+            if (sd.unlockedIngredients) unlockedIngredients = sd.unlockedIngredients;
+            
+            // 3. 社交与任务数据库 (手机系统)
+            if (sd.customersDB) customersDB = sd.customersDB;     // 顾客好感度与资料
+            if (sd.phoneChatDB) phoneChatDB = sd.phoneChatDB;     // 聊天记录
+            if (sd.phoneTaskDB) phoneTaskDB = sd.phoneTaskDB;     // 委托任务
+            if (sd.phoneMatchDB) phoneMatchDB = sd.phoneMatchDB;   // 进行中的比赛
+            if (sd.matchResultsDB) matchResultsDB = sd.matchResultsDB; // 比赛结果历史
+            if (sd.phoneShopDB) phoneShopDB = sd.phoneShopDB;     // 大众点评数据
+            if (sd.phoneForumDB) phoneForumDB = sd.phoneForumDB
+            if (sd.tempDrinkStats) {
+                editorState.tempStats = sd.tempDrinkStats;
+                console.log("✨ 临时研发数据已更新（包括 AI 命名）:", sd.tempDrinkStats.name);
+            }
+            syncGlobalBalance();         // 刷新顶栏金钱
+            updateEnvironmentUI(worldConfig); // 刷新环境背景
+            renderShopNameUI();          // 刷新店名
+            renderCustomerList();        // 刷新顾客列表
+
+            if (document.getElementById('layer-phone').style.display === 'flex') {
+                const activePage = document.querySelector('.sim-page.active')?.id;
+                if (activePage === 'page-chat-list') renderSimChatList();
+                if (activePage === 'page-task') renderSimTaskList();
+                if (activePage === 'page-match') renderSimMatchList();
+                if (activePage === 'page-review') renderSimReviewList();
+                if (activePage === 'page-forum') renderForumList();
+            }
+            
+            // 如果管理界面开着，刷新数据
+            if (document.getElementById('layer-shop-admin').style.display === 'flex') {
+                renderShopAdmin();
+            }
+            console.log("🔄 经营数据已根据 MVU 同步至最新");
         }
     } catch (e) {
-        console.warn("⚠️ 重载数据异常:", e);
+        console.warn("⚠️ MVU同步异常:", e);
     }
 }
+
 
 
 // 在你的 init 函数末尾，或者 initAutoDialogLoader 中添加：
