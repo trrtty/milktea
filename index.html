@@ -6025,17 +6025,21 @@ function updateSyncButtonUI() {
     let userMid = null; // 【1. 新增：定义 ID 记录变量】
 
     try {
+        // 【核心修复 2】：在创建新消息之前，先拿到当前“最后一位”的变量快照
+        // 这样即便 ID 正在变动，我们也拿到了这一刻的经营数据快照
+        const baseMid = TavernHelper.getLastMessageId();
+        const currentData = Mvu.getMvuData({ type: 'message', message_id: baseMid });
+        console.log("📊 捕获当前经营快照，基准 ID:", baseMid);
+
         await TavernHelper.createChatMessages(
             [{ role: 'user', message: promptText }],
             { refresh: 'none' }
         );
         
-        userMid = TavernHelper.getLastMessageId(); // 【2. 新增：捕获 User 楼层 ID】
+        userMid = TavernHelper.getLastMessageId(); // 记录新 User 楼层 ID
 
-        const currentData = Mvu.getMvuData({ type: 'message', message_id: getCurrentMessageId() });
-
+        // --- 步骤 3: 调用 generate ---
         const aiRawResponse = await TavernHelper.generate({ user_input: promptText });
-        
         // 【3. 修改：强化验证，若格式不对直接抛出错误进入 catch】
         if (!aiRawResponse || !aiRawResponse.includes('<dialogtext>')) {
             throw new Error("AI 返回格式不规范或内容为空");
@@ -6063,12 +6067,15 @@ function updateSyncButtonUI() {
             if (parsedData) updatedStatData = parsedData;
         }
 
-        const assistantMid = await TavernHelper.createChatMessages(
+        await TavernHelper.createChatMessages(
             [{ role: 'assistant', message: aiRawResponse, data: updatedStatData || void 0 }],
             { refresh: 'none' }
         );
 
+        // 【核心修复 3】：手动获取刚刚创建的 Assistant 消息 ID
+        const assistantMid = TavernHelper.getLastMessageId();
         window.lastProcessedId = assistantMid;
+        console.log("✅ 步骤6完成，新 Assistant ID:", assistantMid);
 
         if (newDialogData.length > 0) {
             dialogData = newDialogData;
@@ -13765,7 +13772,14 @@ function onDialogLongPressEnd() {
             idsToDelete.push(lastUser.message_id);
         }
 
-        console.log("🗑️ 正在尝试删除楼层:", idsToDelete);
+        if (idsToDelete.length > 0) {
+        console.log("🗑️ 正在删除旧楼层:", idsToDelete);
+        await TavernHelper.deleteChatMessages(idsToDelete);
+        
+        // 【核心修复 1】：必须在这里增加 500ms~800ms 的等待！
+        // 否则酒馆的 ID 索引还没刷新，接下来的 flushTavernBuffer 就会抓错 ID
+        await new Promise(resolve => setTimeout(resolve, 600)); 
+    }
 
         if (idsToDelete.length > 0) {
             // 执行物理删除
