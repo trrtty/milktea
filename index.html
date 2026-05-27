@@ -5900,11 +5900,25 @@
         }
         return await window.generate({
             user_input: args.user_input,
-            should_silence: true  // 关键：不让酒馆自己创建气泡
+            should_silence: true 
         });
+    },
+    // 【新增】：映射酒馆的消息获取函数
+    getChatMessages(mid, options) {
+        if (typeof window.getChatMessages !== 'function') {
+            console.error("❌ 环境不支持 getChatMessages");
+            return [];
+        }
+        return window.getChatMessages(mid, options);
+    },
+    // 【新增】：映射获取最后一条消息 ID 的函数
+    getLastMessageId() {
+        return window.getLastMessageId();
     }
 };
-      /* --- 1. 基础配置与全局变量 --- */
+
+
+/* --- 1. 基础配置与全局变量 --- */
       const nobgBaseUrl =
         "https://raw.githubusercontent.com/trrtty/milktea/refs/heads/main/consumers/nobg/";
       const imgBaseUrl =
@@ -8020,59 +8034,56 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
  * 调试强化版解析器：会在控制台详细输出捕获过程
  */
  function parseDialogTextFromRaw(rawText) {
-    console.group("🔍 剧情捕获流水线"); // 在控制台开启一个日志组
-    console.log("1. 待扫描文本长度:", rawText?.length || 0);
-
+    console.group("🏷️ 标签捕获分析"); 
+    
     if (!rawText) {
-        console.warn("❌ 文本为空，跳过捕获");
+        console.warn("跳过解析：输入文本为空");
         console.groupEnd();
         return [];
     }
 
-    // 使用 gi 确保捕获所有标签且忽略大小写
+    // 使用 gi 全局忽略大小写匹配
     const regex = /<dialogtext>([\s\S]*?)<\/dialogtext>/gi;
     const matches = Array.from(rawText.matchAll(regex));
     
+    console.log("1. 原始文本长度:", rawText.length);
+    console.log("2. 匹配到的标签对数:", matches.length);
+
     if (matches.length === 0) {
-        console.warn("❌ [匹配结果]: 未在文本中发现 <dialogtext> 标签");
-        // 打印前100个字符看看原文大概长啥样
-        console.log("原文预览(前100字):", rawText.substring(0, 100));
         console.groupEnd();
         return [];
     }
 
-    console.log(`2. [匹配结果]: 共发现 ${matches.length} 对标签`);
-
-    // 永远取最后一对匹配项
+    // 永远取最后一对
     let rawContent = matches[matches.length - 1][1].trim();
-    console.log("3. [提取原始内容]:", rawContent);
+    console.log("3. 提取的标签内原文:", rawContent);
 
-    // 清理掉 AI 可能乱加的 HTML 注释
+    // 清理干扰
     rawContent = rawContent.replace(/<!--[\s\S]*?-->/g, "");
     
-    // 精准定位 JSON 数组
     const start = rawContent.indexOf('[');
     const end = rawContent.lastIndexOf(']');
     
     if (start !== -1 && end !== -1) {
         const jsonStr = rawContent.substring(start, end + 1);
-        console.log("4. [定位 JSON 字符串]:", jsonStr);
+        console.log("4. 最终捕获的 JSON 字符串:", jsonStr);
         try {
             const parsed = JSON.parse(jsonStr);
-            console.log("✅ [最终成功]: 成功解析出 " + parsed.length + " 条对话");
+            console.log("✅ 解析成功，对象数量:", parsed.length);
             console.groupEnd();
             return parsed;
         } catch (e) {
-            console.error("❌ [最终失败]: JSON 语法错误!", e.message);
+            console.error("❌ JSON 解析报错:", e.message);
             console.groupEnd();
             return [];
         }
     } else {
-        console.error("❌ [最终失败]: 标签内虽然有内容，但找不到 [ ] 数组结构！");
+        console.error("❌ 没找到 [ ] 数组结构");
         console.groupEnd();
         return [];
     }
 }
+
 
 async function syncLatestContent() {
     try {
