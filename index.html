@@ -4144,6 +4144,36 @@
               <div class="popup-title">系统偏好设置</div>
           </div>
           <div class="popup-content">
+            <!-- 新增：系统操作板块 -->
+<div class="admin-section-label">SYSTEM / 系统操作</div>
+<div class="settings-grid">
+    <!-- 全屏切换 -->
+    <div class="bg-option-card" id="btn-fullscreen" onclick="toggleFullScreen()">
+        <div class="bg-preview-img" style="display:flex; align-items:center; justify-content:center; font-size:40px;">🖥️</div>
+        <b style="font-size:18px;">进入/退出全屏</b>
+    </div>
+    <!-- 读档大厅入口 -->
+    <div class="bg-option-card" onclick="openLayer('layer-archive')">
+        <div class="bg-preview-img" style="display:flex; align-items:center; justify-content:center; font-size:40px;">💾</div>
+        <b style="font-size:18px;">历史剧情读档</b>
+    </div>
+</div>
+
+<!-- 新增：读档大厅全屏层 -->
+<div id="layer-archive" class="popup-layer" style="z-index: 1200; background: #fdfbf7;">
+    <div class="popup-header">
+        <button class="back-btn" onclick="closeLayer('layer-archive')">❮ 返回设置</button>
+        <div class="popup-title">时光回溯 / 读档中心</div>
+    </div>
+    <div class="popup-content">
+        <p style="color:#949f9f; font-size:16px; font-style:italic; margin-bottom:20px; padding:0 10px;">
+            温馨提示：点击任意节点将创建新的分支剧情，当前分支进度将保留在原时间线上。
+        </p>
+        <div id="archive-list-container" style="display: flex; flex-direction: column; gap: 20px; padding-bottom:100px;">
+            <!-- 读档列表将在这里渲染 -->
+        </div>
+    </div>
+</div>
               <!-- 背景选择：增加折叠功能 -->
               <div class="admin-section-label" onclick="toggleSection('bg-select-area', 'bg-arrow')" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; padding-right:15px;">
                   <span>VISUAL / 奶茶杯全局背景</span>
@@ -5888,35 +5918,33 @@
     <script>
       // 定义全局输出函数，确保同时在弹窗和控制台显示
       const TavernHelper = {
-    // 步骤 2 & 6 使用：创建消息
     async createChatMessages(msgs, ops) {
         return await window.createChatMessages(msgs, ops);
     },
-    // 步骤 3 使用：静默获取 AI 文本
     async generate(args) {
-        if (typeof window.generate !== 'function') {
-            console.error("❌ 没找到酒馆的 generate 函数");
-            return "";
-        }
+        if (typeof window.generate !== 'function') return "";
         return await window.generate({
             user_input: args.user_input,
             should_silence: true 
         });
     },
-    // 【新增】：映射酒馆的消息获取函数
     getChatMessages(mid, options) {
-        if (typeof window.getChatMessages !== 'function') {
-            console.error("❌ 环境不支持 getChatMessages");
-            return [];
-        }
+        if (typeof window.getChatMessages !== 'function') return [];
         return window.getChatMessages(mid, options);
     },
-    // 【新增】：映射获取最后一条消息 ID 的函数
     getLastMessageId() {
+        if (typeof window.getLastMessageId !== 'function') return 0;
         return window.getLastMessageId();
-    }
-};
+    },
 
+    executeCommand(cmd) {
+        if (typeof window.triggerSlash === 'function') {
+            return window.triggerSlash(cmd);
+        }
+    }
+
+
+};
 
 /* --- 1. 基础配置与全局变量 --- */
       const nobgBaseUrl =
@@ -8034,56 +8062,31 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
  * 调试强化版解析器：会在控制台详细输出捕获过程
  */
  function parseDialogTextFromRaw(rawText) {
-    console.group("🏷️ 标签捕获分析"); 
+    if (!rawText) return [];
     
-    if (!rawText) {
-        console.warn("跳过解析：输入文本为空");
-        console.groupEnd();
-        return [];
-    }
-
-    // 使用 gi 全局忽略大小写匹配
+    // 全局匹配标签
     const regex = /<dialogtext>([\s\S]*?)<\/dialogtext>/gi;
     const matches = Array.from(rawText.matchAll(regex));
     
-    console.log("1. 原始文本长度:", rawText.length);
-    console.log("2. 匹配到的标签对数:", matches.length);
+    if (matches.length === 0) return [];
 
-    if (matches.length === 0) {
-        console.groupEnd();
-        return [];
-    }
-
-    // 永远取最后一对
+    // 取最后一对标签，清理注释
     let rawContent = matches[matches.length - 1][1].trim();
-    console.log("3. 提取的标签内原文:", rawContent);
-
-    // 清理干扰
     rawContent = rawContent.replace(/<!--[\s\S]*?-->/g, "");
     
+    // 定位并解析 JSON
     const start = rawContent.indexOf('[');
     const end = rawContent.lastIndexOf(']');
     
     if (start !== -1 && end !== -1) {
-        const jsonStr = rawContent.substring(start, end + 1);
-        console.log("4. 最终捕获的 JSON 字符串:", jsonStr);
         try {
-            const parsed = JSON.parse(jsonStr);
-            console.log("✅ 解析成功，对象数量:", parsed.length);
-            console.groupEnd();
-            return parsed;
+            return JSON.parse(rawContent.substring(start, end + 1));
         } catch (e) {
-            console.error("❌ JSON 解析报错:", e.message);
-            console.groupEnd();
             return [];
         }
-    } else {
-        console.error("❌ 没找到 [ ] 数组结构");
-        console.groupEnd();
-        return [];
     }
+    return [];
 }
-
 
 async function syncLatestContent() {
     try {
@@ -13538,6 +13541,105 @@ async function loadLatestDialogFromChat() {
         window.lastMsgId = lastMsg.message_id;
         
         await handleLLMResponse(lastMsg.message_id);
+    }
+}
+
+function toggleFullScreen() {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+            alert(`无法进入全屏: ${err.message}`);
+        });
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+    }
+}
+
+function parseSumFromRaw(rawText) {
+    if (!rawText) return "该时间点未留下剧情概括。";
+    const regex = /<sum>([\s\S]*?)<\/sum>/i;
+    const match = rawText.match(regex);
+    return match ? match[1].trim() : "（无剧情摘要）";
+}
+
+async function renderArchiveList() {
+    const container = document.getElementById("archive-list-container");
+    container.innerHTML = `<div style="text-align:center; padding:50px; color:#deb887; font-size:24px;">⌛ 正在读取时间线...</div>`;
+
+    // 1. 获取所有 Assistant 消息
+    const history = TavernHelper.getChatMessages(-1, { role: 'assistant' });
+    if (history.length === 0) {
+        container.innerHTML = `<div style="text-align:center; padding:50px; color:#999;">暂无存档记录。</div>`;
+        return;
+    }
+
+    container.innerHTML = ""; // 清空加载提示
+    
+    // 2. 倒序遍历（最新的在前）
+    for (let i = history.length - 1; i >= 0; i--) {
+        const currentMsg = history[i];
+        const prevMsg = (i > 0) ? history[i-1] : null;
+        
+        // 尝试从本楼层提取 MVU 数据
+        const currentMvu = Mvu.getMvuData({ type: 'message', message_id: currentMsg.message_id });
+        const curSD = currentMvu?.stat_data;
+        
+        if (!curSD) continue; // 跳过没有数据的楼层
+
+        // 3. 计算差异 (与上一楼比)
+        const prevMvu = prevMsg ? Mvu.getMvuData({ type: 'message', message_id: prevMsg.message_id }) : null;
+        const prevSD = prevMvu?.stat_data;
+
+        // 对比函数：找出新增加的 key
+        const getAdded = (curObj, prevObj) => {
+            if (!curObj) return [];
+            const curKeys = Object.keys(curObj);
+            const prevKeys = prevObj ? Object.keys(prevObj) : [];
+            return curKeys.filter(k => !prevKeys.includes(k));
+        };
+
+        const newIngredients = getAdded(curSD.unlockedIngredients, prevSD?.unlockedIngredients);
+        const newRecipes = getAdded(curSD.shopMenu, prevSD?.shopMenu);
+        const newCustomers = getAdded(curSD.customersDB, prevSD?.customersDB);
+
+        // 4. 构建卡片 HTML
+        const card = document.createElement("div");
+        card.className = "dossier-card-fixed"; // 复用你的档案样式
+        card.style.cursor = "pointer";
+        card.onclick = () => confirmBranch(currentMsg.message_id, parseSumFromRaw(currentMsg.message));
+
+        card.innerHTML = `
+            <div style="display:flex; justify-content:between; align-items:flex-start; margin-bottom:10px;">
+                <b style="font-size:20px; color:#8b4513;">楼层 ID: ${currentMsg.message_id}</b>
+                <span style="margin-left:auto; color:#999; font-size:14px;">存款: ¥${curSD.shopFinancials?.currentBalance || 0}</span>
+            </div>
+            <div style="font-size:22px; color:#333; line-height:1.4; margin-bottom:15px; border-left:5px solid #deb887; padding-left:10px;">
+                ${parseSumFromRaw(currentMsg.message)}
+            </div>
+            <div class="stats-grid-full" style="font-size:16px;">
+                <div class="stats-row"><b>✨ 新原料:</b> <span>${newIngredients.length > 0 ? newIngredients.join('、') : '无'}</span></div>
+                <div class="stats-row"><b>📜 新配方:</b> <span>${newRecipes.length > 0 ? newRecipes.join('、') : '无'}</span></div>
+                <div class="stats-row"><b>👥 新顾客:</b> <span>${newCustomers.length > 0 ? newCustomers.join('、') : '无'}</span></div>
+            </div>
+        `;
+        container.appendChild(card);
+    }
+}
+
+// 5. 劫持 openLayer 增加刷新读档列表的逻辑
+const originalOpenLayer = openLayer;
+window.openLayer = function(layerId) {
+    if (layerId === 'layer-archive') renderArchiveList();
+    originalOpenLayer(layerId);
+};
+
+// 确认读档提示
+function confirmBranch(mid, summary) {
+    if (confirm(`🕰️ 确定要回到此节点吗？\n\n节点内容："${summary}"\n\n系统将为此创建一个新的剧情分支。`)) {
+        TavernHelper.executeCommand(`/branch-create ${mid}`);
+        // 自动刷新页面以应用新分支
+        setTimeout(() => location.reload(), 1000);
     }
 }
 </script>
