@@ -4,7 +4,7 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>奶茶店同层5界面</title>
+    <title>奶茶店同层10界面</title>
     <!-- 引入 Font Awesome 图标库 -->
     <link
       rel="stylesheet"
@@ -6049,7 +6049,13 @@ function updateSyncButtonUI() {
         // 关闭 Loading 并开启新剧情的第一句
         if (loader) loader.style.display = "none";
         console.log("✅ 7步同步流完成，开启新剧情。");
-        nextDialog(); 
+        if (appSettings.pendingScenes && appSettings.pendingScenes.length > 0) {
+            console.log("🎬 检测到待处理场景，正在跳转...");
+            await processSceneQueue(); 
+        } else {
+            // 如果没有排队场景，才正常播放剧情
+            nextDialog(); 
+        }
 
     } catch (e) {
         console.error("❌ 静默同步流执行失败:", e);
