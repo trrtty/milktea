@@ -5936,61 +5936,49 @@ function updateSyncButtonUI() {
 /**
  * 核心：静默同步店长决策到酒馆
  */
+/**
+ * 核心：静默同步店长决策到酒馆
+ */
  async function flushTavernBuffer() {
     if (tavernMessageBuffer.length === 0) return;
 
-    // 1. 显示加载遮罩
+    // 1. 显示加载遮罩，防止重复操作
     const loader = document.getElementById("devLoading");
     if (loader) {
         loader.style.display = "flex";
-        document.querySelector("#devLoading .loading-text").innerText = "正在通过加密频道传输决策...";
+        document.querySelector("#devLoading .loading-text").innerText = "正在通过底层协议传输决策...";
     }
 
-    // 构建提示词内容
+    // 2. 构建消息内容
     let modeTag = "【" + (currentNarrativeMode === 'novel' ? "小说" : "对话") + "模式】";
     const combinedAction = modeTag + "【店长决策汇总】：\n\n" + tavernMessageBuffer.join("\n\n");
 
     try {
-        // --- 步骤 1：静默创建 USER 消息 ---
-        // { refresh: 'none' } 确保酒馆主界面不会滚动或刷新
+        // --- 步骤：静默创建 USER 消息 ---
+        // { refresh: 'none' } 是关键：它将消息存入数据库，但酒馆 UI 不会跳动
         await TavernHelper.createChatMessages(
             [{ role: 'user', message: combinedAction }],
             { refresh: 'none' } 
         );
 
-        // 清理本地状态
+        // 3. 清空本地缓存缓冲区
         tavernMessageBuffer = [];
         updateSyncButtonUI();
 
-        // --- 步骤 2：设置“生成完成”监听器 ---
-        const onResponseFinished = async (mid, type) => {
-            // 'normal' 表示 AI 停止生成，消息已完整
-            if (type === 'normal') {
-                eventOff(tavern_events.MESSAGE_RECEIVED, onResponseFinished);
-                console.log("✅ AI 回复已就绪:", mid);
-                
-                // 执行你要求的：提取格式文本 -> 解析变量 -> 刷新显示
-                await handleLLMResponse(mid);
-            }
-        };
-        
-        // 绑定监听
-        eventOn(tavern_events.MESSAGE_RECEIVED, onResponseFinished);
-
-        // --- 步骤 3：触发 AI 生成 ---
-        // 使用 /trigger 而不是会报错的 /generate
+        // 4. 触发 AI 生成
+        // 尝试触发生成指令
         await TavernHelper.triggerSlash('/trigger');
 
-        // 安全兜底：如果30秒没反应，关闭 Loading 防止卡死
+        // 5. 设置超时保护，30秒后强制关闭 Loading 防止链路断开
         setTimeout(() => {
-            if (loader.style.display === "flex") {
+            if (loader && loader.style.display === "flex") {
                 loader.style.display = "none";
-                eventOff(tavern_events.MESSAGE_RECEIVED, onResponseFinished);
+                console.warn("⚠️ 同步请求响应超时");
             }
         }, 30000);
 
     } catch (e) {
-        console.error("同步链路异常:", e);
+        console.error("❌ 静默同步失败:", e);
         if (loader) loader.style.display = "none";
     }
 }
@@ -7965,7 +7953,7 @@ async function init() {
     // 1. 设置基础 UI 缩放
     setScale();
     initForumCleanupUI();
-
+    initAutoDialogLoader(); 
     // 2. 等待并解析 MVU 数据
     try {
         await waitGlobalInitialized("Mvu");
@@ -13199,22 +13187,25 @@ function getSelectedLayer() {
 }
 
 
-async function handleLLMResponse(messageId) {
+/**
+ * 处理 AI 生成完毕后的 Assistant 消息
+ */
+ async function handleLLMResponse(messageId) {
     try {
-        // 获取刚刚生成的最后一条消息内容
+        // 1. 获取消息内容
         const msgs = TavernHelper.getChatMessages(messageId);
         if (!msgs || msgs.length === 0) return;
-        const rawText = msgs[0].message;
+        const rawText = msgs[0].message || '';
 
-        // --- 步骤 4：验证并提取 <dialogtext> ---
-        const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/g;
-        const matches = Array.from(rawText.matchAll(regex));
+        // --- 步骤：提取 <dialogtext> ---
+        const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/i;
+        const match = rawText.match(regex);
         
-        if (matches.length > 0) {
-            let content = matches[matches.length - 1][1].trim();
+        if (match) {
+            let content = match[1].trim();
             content = content.replace(/<!--[\s\S]*?-->/g, ""); // 剔除注释
             
-            // 定位 JSON 数组
+            // 提取 JSON 数组部分
             const start = content.indexOf('[');
             const end = content.lastIndexOf(']');
             if (start !== -1 && end !== -1) {
@@ -13224,69 +13215,89 @@ async function handleLLMResponse(messageId) {
                 dialogData = JSON.parse(jsonStr);
                 dialogIndex = -1; // 重置进度
                 isStoryFinished = false; 
-                
-                console.log("🎬 剧情数据解析成功");
+                console.log("🎬 剧情数据已从楼层提取并更新");
             }
         }
 
-        // --- 步骤 5 & 6：解析变量与静默更新状态 ---
-        // 直接调用你写好的 reloadGameData 强制从最新楼层的 MVU 中提取变量
+        // --- 步骤：解析变量 (MVU同步) ---
         await reloadGameData(messageId);
 
-        // --- 步骤 7：刷新游戏显示 ---
-        // 隐藏加载层
+        // 2. 隐藏 Loading
         const loader = document.getElementById("devLoading");
         if (loader) loader.style.display = "none";
 
-        // 自动触发剧情第一句
+        // 3. 自动开启第一条剧情对白
         nextDialog();
 
-        console.log("✨ 游戏画面已根据最新 Assistant 楼层同步");
-
     } catch (e) {
-        console.error("解析 Assistant 回复失败:", e);
+        console.error("❌ 解析回复失败:", e);
         document.getElementById("devLoading").style.display = "none";
     }
 }
-async function reloadGameData(mid) {
-    // 强制从最新的 MVU 楼层读取数据
-    const variables = Mvu.getMvuData({ type: 'message', message_id: mid });
-    const sd = _.get(variables, 'stat_data');
 
-    if (sd) {
-        // 更新本地内存数据库
-        if (sd.shopFinancials) shopFinancials = sd.shopFinancials;
-        if (sd.unlockedIngredients) unlockedIngredients = sd.unlockedIngredients;
-        if (sd.shopMenu) shopMenu = sd.shopMenu;
-        if (sd.phoneShopDB) phoneShopDB = sd.phoneShopDB;
-        if (sd.worldConfig) worldConfig = sd.worldConfig;
-        
-        // 刷新 UI
-        syncGlobalBalance();
-        updateEnvironmentUI(worldConfig);
-        renderCustomerList();
-        console.log("🔄 游戏全局数据已同步至最新状态");
+/**
+ * 强制从 MVU 刷新经营数值
+ */
+async function reloadGameData(mid) {
+    try {
+        // 获取该楼层关联的变量快照
+        const variables = Mvu.getMvuData({ type: 'message', message_id: mid });
+        const sd = _.get(variables, 'stat_data');
+
+        if (sd) {
+            // 批量同步本地内存数据库
+            if (sd.shopFinancials) shopFinancials = sd.shopFinancials;
+            if (sd.unlockedIngredients) unlockedIngredients = sd.unlockedIngredients;
+            if (sd.shopMenu) shopMenu = sd.shopMenu;
+            if (sd.phoneShopDB) phoneShopDB = sd.phoneShopDB;
+            if (sd.worldConfig) worldConfig = sd.worldConfig;
+            
+            // 刷新界面显示
+            syncGlobalBalance(); // 刷新金钱
+            updateEnvironmentUI(worldConfig); // 刷新环境/背景
+            renderCustomerList(); // 刷新顾客
+            console.log("🔄 经营数据已根据 MVU 同步至最新");
+        }
+    } catch (e) {
+        console.warn("⚠️ MVU同步异常:", e);
     }
 }
+
+
 
 // 在你的 init 函数末尾，或者 initAutoDialogLoader 中添加：
 
-function initAutoDialogLoader() {
+/**
+ * 核心监听：自动化链路
+ */
+ function initAutoDialogLoader() {
     if (typeof eventOn !== 'undefined' && typeof tavern_events !== 'undefined') {
         
-        // 监听消息接收：只要有新消息（不论是否是同步按钮触发的）
+        // 监听新消息：重点是捕获 type === 'normal' (生成完全结束)
         eventOn(tavern_events.MESSAGE_RECEIVED, async (mid, type) => {
+            console.log(`🔔 收到消息事件: ID=${mid}, Type=${type}`);
+            
             if (type === 'normal') {
-                // 如果当前没有在 Loading（说明不是玩家主动点的同步），也尝试更新剧情
-                // 这样你在酒馆里手动回复，游戏也能跟着动
-                if (document.getElementById("devLoading").style.display !== "flex") {
-                    await loadLatestDialogFromChat(); 
-                }
+                // 检查是否已经是处理过的消息，防止循环触发
+                if (window.lastProcessedId === mid) return;
+                window.lastProcessedId = mid;
+
+                // 执行加载逻辑
+                await handleLLMResponse(mid);
             }
+        });
+
+        // 监听聊天文件切换（重载、换人）
+        eventOn(tavern_events.CHAT_CHANGED, () => {
+            window.lastProcessedId = null;
+            // 这种情况下也可以尝试静默读取一次最后一句
+            setTimeout(async () => {
+                let msgs = TavernHelper.getChatMessages(-1, { role: 'assistant' });
+                if (msgs.length > 0) await handleLLMResponse(msgs[msgs.length - 1].message_id);
+            }, 500);
         });
     }
 }
-
 // 补充这个工具函数
 async function loadLatestDialogFromChat() {
     let messages = TavernHelper.getChatMessages(-1, { role: 'assistant' });
