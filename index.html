@@ -13561,148 +13561,116 @@ function toggleFullScreen() {
     }
 }
 
-function parseSumFromRaw(rawText) {
-    if (!rawText) return "该时间点未留下剧情概括。";
-    const regex = /<sum>([\s\S]*?)<\/sum>/i;
-    const match = rawText.match(regex);
-    return match ? match[1].trim() : "（无剧情摘要）";
-}
-
 /**
- * 读档大厅：带详细日志的渲染逻辑
- */
-/**
- * 读档大厅：全量历史扫描引擎
+ * 读档大厅：仿冥河系统全量扫描引擎
  */
  async function renderArchiveList() {
     const container = document.getElementById("archive-list-container");
     if (!container) return;
 
-    container.innerHTML = `<div style="text-align:center; padding:50px; color:#deb887; font-size:24px;" class="animate-pulse">⌛ 正在全量扫描时间线...</div>`;
+    container.innerHTML = `<div style="text-align:center; padding:50px; color:#deb887; font-size:24px;">⌛ 正在全量扫描历史记忆...</div>`;
 
-    // 1. 获取酒馆中所有的助手消息 (-1 表示从头到尾)
-    const allMsgs = TavernHelper.getChatMessages(-1, { role: 'assistant' });
-    
-    if (allMsgs.length === 0) {
-        container.innerHTML = `<div style="text-align:center; padding:50px; color:#999;">未发现任何 AI 回复记录。</div>`;
+    // 1. 获取酒馆所有消息 (-1 为全量)
+    const allMsgs = TavernHelper.getChatMessages(-1);
+    // 过滤出所有 AI 回复，且内容包含 <sum> 标签的消息
+    const assistantSumMsgs = allMsgs.filter(m => m.role === 'assistant' && m.message && m.message.includes('<sum>'));
+
+    if (assistantSumMsgs.length === 0) {
+        container.innerHTML = `<div style="text-align:center; padding:50px; color:#999;">未在历史记录中发现 <sum> 摘要。</div>`;
         return;
     }
 
     let htmlBuffer = "";
-    console.log(`🔎 开始扫描 ${allMsgs.length} 条历史记录...`);
-
+    
     // 2. 倒序遍历（最新的在前）
-    for (let i = allMsgs.length - 1; i >= 0; i--) {
-        const msgObj = allMsgs[i];
-        const text = msgObj.message || "";
-        
-        // 提取 <sum> 标签，如果没有就跳过（或者显示默认标题）
-        const summary = parseSumFromRaw(text);
-        if (summary === "N/A" && !text.includes('<dialogtext>')) continue; 
+    for (let i = assistantSumMsgs.length - 1; i >= 0; i--) {
+        const msgObj = assistantSumMsgs[i];
+        const mid = msgObj.message_id;
+        const summary = parseSumFromRaw(msgObj.message);
 
-        // 3. 获取当前楼层和上一楼层的变量快照进行对比 (Diff)
-        const curMvu = Mvu.getMvuData({ type: 'message', message_id: msgObj.message_id });
+        // 3. 获取当前楼层变量
+        const curMvu = Mvu.getMvuData({ type: 'message', message_id: mid });
         const curSD = curMvu?.stat_data;
 
-        let diffInfo = { ingredients: [], recipes: [], cash: 0 };
-        
+        let statsHtml = `<div style="color:#ccc; font-style:italic;">该楼层未检测到数据快照</div>`;
+
         if (curSD) {
-            // 寻找上一个有数据的助手消息（用于计算差异）
+            // 4. 寻找“上一个有效数据点”进行对比
             let prevSD = null;
-            for (let j = i - 1; j >= 0; j--) {
+            // 注意：这里要从原始 allMsgs 中往回找最近一个带 stat_data 的 AI 消息
+            const currentIndexInAll = allMsgs.findIndex(m => m.message_id === mid);
+            for (let j = currentIndexInAll - 1; j >= 0; j--) {
                 const pMvu = Mvu.getMvuData({ type: 'message', message_id: allMsgs[j].message_id });
-                if (pMvu?.stat_data) {
+                if (allMsgs[j].role === 'assistant' && pMvu?.stat_data) {
                     prevSD = pMvu.stat_data;
                     break;
                 }
             }
 
-            // 计算差异逻辑
-            const getAdded = (cur, prev) => {
-                const curKeys = cur ? Object.keys(cur) : [];
-                const prevKeys = prev ? Object.keys(prev) : [];
-                return curKeys.filter(k => !prevKeys.includes(k));
+            // --- 核心：按中文 [名称] 计算新增 ---
+            const getNewNames = (curObj, prevObj) => {
+                if (!curObj) return [];
+                // 提取当前所有条目的 .name 属性 (配方库的 Key 直接就是名字)
+                const curNames = Object.values(curObj).map(item => item.name || "未知");
+                const prevNames = prevObj ? Object.values(prevObj).map(item => item.name || "未知") : [];
+                // 过滤出上一楼没有的名字
+                return curNames.filter(n => !prevNames.includes(n));
             };
 
-            diffInfo.ingredients = getAdded(curSD.unlockedIngredients, prevSD?.unlockedIngredients);
-            diffInfo.recipes = getAdded(curSD.shopMenu, prevSD?.shopMenu);
-            diffInfo.cash = curSD.shopFinancials?.currentBalance || 0;
+            const newIng = getNewNames(curSD.unlockedIngredients, prevSD?.unlockedIngredients);
+            const newCust = getNewNames(curSD.customersDB, prevSD?.customersDB);
+            // 配方库特殊：它的 Key 本身就是中文名，所以直接 Object.keys 对比即可
+            const curRecs = Object.keys(curSD.shopMenu || {});
+            const prevRecs = prevSD ? Object.keys(prevSD.shopMenu || {}) : [];
+            const newRec = curRecs.filter(r => !prevRecs.includes(r));
+
+            statsHtml = `
+                <div style="display:grid; grid-template-columns:1fr; gap:5px; font-size:16px; color:#666; background:#fdfbf7; padding:10px; border-radius:10px; border:1px solid #eee;">
+                    <div style="display:flex; justify-content:between; font-weight:bold; margin-bottom:5px; color:#8b4513;">
+                        <span>💰 当前存款: ¥${curSD.shopFinancials?.currentBalance || 0}</span>
+                    </div>
+                    <div><b style="color:#8fbc8f;">🆕 新原料:</b> ${newIng.length > 0 ? newIng.join('、') : '无'}</div>
+                    <div><b style="color:#deb887;">📖 新配方:</b> ${newRec.length > 0 ? newRec.join('、') : '无'}</div>
+                    <div><b style="color:#ff6b81;">👥 新顾客:</b> ${newCust.length > 0 ? newCust.join('、') : '无'}</div>
+                </div>
+            `;
         }
 
-        // 4. 生成卡片 HTML
+        // 5. 组装卡片
         htmlBuffer += `
-            <div class="dossier-card-fixed archive-card" 
-                 onclick="confirmBranch(${msgObj.message_id}, '${summary.replace(/'/g, "\\'")}')"
-                 style="margin-bottom:20px; cursor:pointer; border:2px solid #deb887; padding:20px; background:#fff; transition:0.2s; position:relative; overflow:hidden;">
-                
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid #f5f5f0; padding-bottom:8px;">
-                    <span style="background:#8b4513; color:#fff; padding:2px 8px; border-radius:4px; font-size:14px; font-family:monospace;">FLOOR #${msgObj.message_id}</span>
-                    <b style="color:#d2691e; font-size:18px;">¥ ${diffInfo.cash}</b>
+            <div class="dossier-card-fixed" onclick="confirmBranch(${mid}, '${summary.replace(/'/g, "\\'")}')"
+                 style="margin-bottom:20px; cursor:pointer; border:2px solid #deb887; padding:20px; background:#fff; position:relative;">
+                <div style="margin-bottom:8px;">
+                    <span style="background:#8b4513; color:#fff; padding:2px 8px; border-radius:4px; font-size:14px;">楼层 #${mid}</span>
                 </div>
-
-                <div style="font-size:22px; font-weight:900; color:#333; line-height:1.4; margin:10px 0;">
-                    ${summary === "N/A" ? "未命名剧情节点" : summary}
+                <div style="font-size:24px; font-weight:900; color:#333; margin-bottom:15px; line-height:1.4;">
+                    “ ${summary} ”
                 </div>
-
-                <div style="display:grid; grid-template-columns:1fr; gap:5px; font-size:16px; color:#666; background:#fdfbf7; padding:10px; border-radius:10px;">
-                    <div style="display:flex; gap:10px;">
-                        <b style="color:#8fbc8f; flex-shrink:0;">🆕 新增原料:</b> 
-                        <span>${diffInfo.ingredients.length > 0 ? diffInfo.ingredients.join('、') : '<span style="color:#ccc;">无变动</span>'}</span>
-                    </div>
-                    <div style="display:flex; gap:10px;">
-                        <b style="color:#deb887; flex-shrink:0;">📖 新增配方:</b> 
-                        <span>${diffInfo.recipes.length > 0 ? diffInfo.recipes.join('、') : '<span style="color:#ccc;">无变动</span>'}</span>
-                    </div>
-                </div>
-                
-                <!-- 装饰：右上角折角效果 -->
-                <div style="position:absolute; top:0; right:0; width:30px; height:30px; background:linear-gradient(225deg, #f5deb3 50%, #fff 50%); shadow: -2px 2px 5px rgba(0,0,0,0.05);"></div>
+                ${statsHtml}
             </div>
         `;
     }
 
-    container.innerHTML = htmlBuffer || `<div style="text-align:center; padding:50px; color:#999;">未发现有效的剧情存档点。</div>`;
+    container.innerHTML = htmlBuffer;
 }
 
 /**
- * 精准提取 <sum>
+ * 摘要解析
  */
 function parseSumFromRaw(text) {
-    if (!text) return "N/A";
     const match = text.match(/<sum>([\s\S]*?)<\/sum>/i);
-    return match ? match[1].trim() : "N/A";
+    return match ? match[1].trim() : "未命名的剧情点";
 }
 
 /**
- * 分支确认逻辑
+ * 分支跳转执行
  */
 function confirmBranch(mid, summary) {
-    // 震动反馈 (可选)
-    if (window.navigator.vibrate) window.navigator.vibrate(50);
-    
-    if (confirm(`🕰️ 确定要回溯到此时间点吗？\n\n剧情摘要：\n"${summary}"\n\n注意：这会创建一个新的分支。`)) {
+    if (confirm(`🕰️ 确定要回溯到此时间点吗？\n\n"${summary}"\n\n注意：这会创建一个新的对话分支。`)) {
         TavernHelper.executeCommand(`/branch-create ${mid}`);
     }
-}
-/**
- * 摘要解析 (支持 <sum> 标签)
- */
-function parseSumFromRaw(rawText) {
-    if (!rawText) return "无内容";
-    const regex = /<sum>([\s\S]*?)<\/sum>/i;
-    const match = rawText.match(regex);
-    return match ? match[1].trim() : "未分类的剧情节点";
 }
 
-/**
- * 执行读档分支
- */
-function confirmBranch(mid, summary) {
-    if (confirm(`🕰️ 确定要回溯到此时间点吗？\n\n节点：${summary}\n\n注意：这将创建一个新的对话分支。`)) {
-        console.log(`🚀 正在执行分支跳转: /branch-create ${mid}`);
-        TavernHelper.executeCommand(`/branch-create ${mid}`);
-    }
-}
 // 5. 劫持 openLayer 增加刷新读档列表的逻辑
 const originalOpenLayer = openLayer;
 window.openLayer = function(layerId) {
