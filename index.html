@@ -8040,6 +8040,39 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
     }
     return [];
 }
+
+async function syncLatestContent() {
+    try {
+        // 1. 获取全量 Assistant 消息，取最后 5 条进行扫描
+        const history = TavernHelper.getChatMessages(-1, { role: 'assistant' }).slice(-5);
+        
+        let latestDialog = null;
+
+        // 2. 倒序扫描：从最近的一条往回找
+        for (let i = history.length - 1; i >= 0; i--) {
+            const parsed = parseDialogTextFromRaw(history[i].message);
+            if (parsed && parsed.length > 0) {
+                latestDialog = parsed;
+                console.log(`🎯 匹配成功！内容来自楼层: ${history[i].message_id}`);
+                break; // 只要找到带标签的，立即停下
+            }
+        }
+
+        if (latestDialog) {
+            dialogData = latestDialog;
+            // 如果你在播第一句，可以保留 index，或者根据需求设为 0
+            if (dialogIndex === -1) dialogIndex = 0; 
+            
+            // 刷新 UI
+            const current = dialogData[dialogIndex];
+            if (current) syncStoryUI(current);
+        }
+
+    } catch (e) {
+        console.error("同步内容失败:", e);
+    }
+}
+
 // --- 强化版：全能初始化与场景恢复系统 ---
 async function init() {
     console.log("🚀 正在初始化托管版经营系统...");
@@ -8135,6 +8168,10 @@ console.log("👤 玩家身份已识别:", playerName);
         }
     } catch (e) { console.error("剧情提取异常:", e); }
 
+
+
+    await reloadGameData(getLastMessageId()); 
+    await syncLatestContent(); 
     // 4. 执行 UI 刷新
     wakeUpMainHallUI(); 
     renderCustomerList();
