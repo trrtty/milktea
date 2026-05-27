@@ -13711,54 +13711,96 @@ function onDialogLongPressEnd() {
 }
 
 // 3. 执行重roll
-async function handleRegenerateRequest() {
-    // 获取最后一条 AI 消息
-    const assistantMsgs = TavernHelper.getChatMessages(-1, { role: 'assistant' });
-    if (assistantMsgs.length === 0) return;
-    const lastAssistant = assistantMsgs[assistantMsgs.length - 1];
+/**
+ * 稳健版重roll：修复 ID 超出范围的 Bug
+ */
+ async function handleRegenerateRequest() {
+    // 1. 获取当前对话的最后 ID
+    const lastId = TavernHelper.getLastMessageId();
+    // 2. 拿到最后 10 条消息进行分析（比全量扫描快且稳）
+    const recentMsgs = TavernHelper.getChatMessages(`0-${lastId}`).slice(-10);
     
-    // 获取最后一对消息
-    const lastMid = TavernHelper.getLastMessageId();
-    const allMsgs = TavernHelper.getChatMessages(`0-${lastMid}`);
-    const assistantIdx = allMsgs.findIndex(m => m.message_id === lastAssistant.message_id);
-    const lastUser = (assistantIdx > 0) ? allMsgs[assistantIdx - 1] : null;
+    if (recentMsgs.length === 0) return;
 
-    if (!confirm("🔄 确定要撤销本次剧情并重roll吗？\n(这将删除当前楼层并自动重新同步决策)")) return;
+    // 3. 倒序寻找最后一个 AI 消息
+    let lastAssistant = null;
+    let assistantIdx = -1;
+    for (let i = recentMsgs.length - 1; i >= 0; i--) {
+        if (recentMsgs[i].role === 'assistant') {
+            lastAssistant = recentMsgs[i];
+            assistantIdx = i;
+            break;
+        }
+    }
+
+    if (!lastAssistant) {
+        showSysAlert("未发现可撤回的 AI 回复。");
+        return;
+    }
+
+    // 4. 寻找紧挨着 AI 的 User 消息
+    let lastUser = null;
+    if (assistantIdx > 0 && recentMsgs[assistantIdx - 1].role === 'user') {
+        lastUser = recentMsgs[assistantIdx - 1];
+    }
+
+    // 确认弹窗
+    if (!confirm("🔄 确定要撤销当前剧情并重新生成吗？")) return;
 
     try {
         const loader = document.getElementById("devLoading");
         if (loader) {
             loader.style.display = "flex";
-            document.querySelector("#devLoading .loading-text").innerText = "正在撤销并重新连接时间线...";
+            document.querySelector("#devLoading .loading-text").innerText = "正在撤销时间线...";
         }
 
-        // A. 删除这一对楼层（AI 和它上面的 User 决策层）
-        let idsToDelete = [lastAssistant.message_id];
-        if (lastUser && lastUser.role === 'user') {
+        // --- 核心修复：物理删除检查 ---
+        const idsToDelete = [];
+        
+        // 强制转为数字，确保不传 null 或 undefined 进去
+        if (lastAssistant && typeof lastAssistant.message_id === 'number') {
+            idsToDelete.push(lastAssistant.message_id);
+        }
+        if (lastUser && typeof lastUser.message_id === 'number') {
             idsToDelete.push(lastUser.message_id);
         }
-        await TavernHelper.deleteChatMessages(idsToDelete);
 
-        // B. 还原决策到缓冲区
-        if (lastUser && lastUser.role === 'user') {
+        console.log("🗑️ 正在尝试删除楼层:", idsToDelete);
+
+        if (idsToDelete.length > 0) {
+            // 执行物理删除
+            await TavernHelper.deleteChatMessages(idsToDelete);
+        } else {
+            throw new Error("无法正确定位消息 ID");
+        }
+
+        // --- 还原逻辑 ---
+        if (lastUser && lastUser.message) {
             const oldPrompt = lastUser.message;
             // 提取出【店长决策汇总】：之后的内容
             const decisionPart = oldPrompt.split('【店长决策汇总】：')[1] || "";
             if (decisionPart) {
-                // 将旧决策拆分回篮子
+                // 还原篮子
                 tavernMessageBuffer = decisionPart.trim().split('\n\n').filter(Boolean);
                 updateSyncButtonUI();
                 
-                // C. 自动重新触发同步生成
+                // 自动再次触发同步（这样玩家不用点第二次同步）
+                console.log("🚀 还原决策成功，正在重新同步...");
                 await flushTavernBuffer();
             }
+        } else {
+            // 如果没找到 User 消息，至少把 AI 那层删了，然后刷新页面
+            location.reload(); 
         }
+
     } catch (e) {
-        console.error(e);
+        console.error("❌ 重roll流程失败:", e);
         if (document.getElementById("devLoading")) document.getElementById("devLoading").style.display = "none";
-        alert("重roll失败: " + e.message);
+        showSysAlert("重roll失败: " + e.message);
     }
 }
+
+
 </script>
   </body>
 </html>
