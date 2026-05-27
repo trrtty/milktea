@@ -13571,97 +13571,119 @@ function parseSumFromRaw(rawText) {
 /**
  * 读档大厅：带详细日志的渲染逻辑
  */
+/**
+ * 读档大厅：全量历史扫描引擎
+ */
  async function renderArchiveList() {
     const container = document.getElementById("archive-list-container");
-    if (!container) return console.error("❌ 找不到 archive-list-container");
+    if (!container) return;
 
-    console.group("📂 读档系统诊断日志"); // 开启日志组
-    container.innerHTML = `<div style="text-align:center; padding:50px; color:#deb887; font-size:24px;">⌛ 正在读取时间线...</div>`;
+    container.innerHTML = `<div style="text-align:center; padding:50px; color:#deb887; font-size:24px;" class="animate-pulse">⌛ 正在全量扫描时间线...</div>`;
 
-    // 1. 获取消息历史
-    const history = TavernHelper.getChatMessages(-1, { role: 'assistant' });
-    console.log("1. 获取到的 Assistant 消息总数:", history.length);
-
-    if (!history || history.length === 0) {
-        console.warn("⚠️ 未获取到任何 Assistant 消息，请检查 TavernHelper 是否映射正确");
-        container.innerHTML = `<div style="text-align:center; padding:50px; color:#999;">暂无 Assistant 存档记录。</div>`;
-        console.groupEnd();
+    // 1. 获取酒馆中所有的助手消息 (-1 表示从头到尾)
+    const allMsgs = TavernHelper.getChatMessages(-1, { role: 'assistant' });
+    
+    if (allMsgs.length === 0) {
+        container.innerHTML = `<div style="text-align:center; padding:50px; color:#999;">未发现任何 AI 回复记录。</div>`;
         return;
     }
 
-    container.innerHTML = ""; // 清空
+    let htmlBuffer = "";
+    console.log(`🔎 开始扫描 ${allMsgs.length} 条历史记录...`);
 
-    // 2. 倒序遍历处理
-    for (let i = history.length - 1; i >= 0; i--) {
-        const msgObj = history[i];
-        const mid = msgObj.message_id;
+    // 2. 倒序遍历（最新的在前）
+    for (let i = allMsgs.length - 1; i >= 0; i--) {
+        const msgObj = allMsgs[i];
+        const text = msgObj.message || "";
+        
+        // 提取 <sum> 标签，如果没有就跳过（或者显示默认标题）
+        const summary = parseSumFromRaw(text);
+        if (summary === "N/A" && !text.includes('<dialogtext>')) continue; 
 
-        try {
-            // 3. 尝试读取该楼层的变量快照
-            const mvuResult = Mvu.getMvuData({ type: 'message', message_id: mid });
-            const sd = mvuResult?.stat_data;
+        // 3. 获取当前楼层和上一楼层的变量快照进行对比 (Diff)
+        const curMvu = Mvu.getMvuData({ type: 'message', message_id: msgObj.message_id });
+        const curSD = curMvu?.stat_data;
 
-            if (!sd) {
-                console.log(`⏭️ 楼层 [${mid}]: 无变量快照 (stat_data 为空)，跳过显示`);
-                continue;
-            }
-
-            console.log(`✅ 楼层 [${mid}]: 发现快照数据，准备比对...`);
-
-            // 4. 计算与“上一个带数据的楼层”的差异
+        let diffInfo = { ingredients: [], recipes: [], cash: 0 };
+        
+        if (curSD) {
+            // 寻找上一个有数据的助手消息（用于计算差异）
             let prevSD = null;
-            // 寻找上一个有数据的助手消息
             for (let j = i - 1; j >= 0; j--) {
-                const prevMvu = Mvu.getMvuData({ type: 'message', message_id: history[j].message_id });
-                if (prevMvu?.stat_data) {
-                    prevSD = prevMvu.stat_data;
+                const pMvu = Mvu.getMvuData({ type: 'message', message_id: allMsgs[j].message_id });
+                if (pMvu?.stat_data) {
+                    prevSD = pMvu.stat_data;
                     break;
                 }
             }
 
-            const getAddedKeys = (cur, prev) => {
-                if (!cur) return [];
-                const curK = Object.keys(cur);
-                const prevK = prev ? Object.keys(prev) : [];
-                return curK.filter(k => !prevK.includes(k));
+            // 计算差异逻辑
+            const getAdded = (cur, prev) => {
+                const curKeys = cur ? Object.keys(cur) : [];
+                const prevKeys = prev ? Object.keys(prev) : [];
+                return curKeys.filter(k => !prevKeys.includes(k));
             };
 
-            const newIng = getAddedKeys(sd.unlockedIngredients, prevSD?.unlockedIngredients);
-            const newRec = getAddedKeys(sd.shopMenu, prevSD?.shopMenu);
-            const newCust = getAddedKeys(sd.customersDB, prevSD?.customersDB);
-
-            // 5. 渲染卡片
-            const summary = parseSumFromRaw(msgObj.message);
-            const card = document.createElement("div");
-            card.className = "dossier-card-fixed";
-            card.style.cssText = "margin-bottom:20px; cursor:pointer; border:2px solid #deb887; padding:20px; background:#fff;";
-            card.onclick = () => confirmBranch(mid, summary);
-
-            card.innerHTML = `
-                <div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding-bottom:8px; margin-bottom:10px;">
-                    <b style="color:#8b4513;">时间点 ID: ${mid}</b>
-                    <span style="font-weight:bold; color:#d2691e;">资金: ¥${sd.shopFinancials?.currentBalance || 0}</span>
-                </div>
-                <div style="font-size:22px; font-weight:bold; color:#333; margin-bottom:10px;">“ ${summary} ”</div>
-                <div style="font-size:16px; color:#666; line-height:1.6;">
-                    <div>🆕 新原料: ${newIng.length > 0 ? newIng.join('、') : '<span style="color:#ccc;">无</span>'}</div>
-                    <div>📖 新配方: ${newRec.length > 0 ? newRec.join('、') : '<span style="color:#ccc;">无</span>'}</div>
-                    <div>👥 新顾客: ${newCust.length > 0 ? newCust.join('、') : '<span style="color:#ccc;">无</span>'}</div>
-                </div>
-            `;
-            container.appendChild(card);
-
-        } catch (e) {
-            console.error(`❌ 处理楼层 [${mid}] 时发生崩溃:`, e);
+            diffInfo.ingredients = getAdded(curSD.unlockedIngredients, prevSD?.unlockedIngredients);
+            diffInfo.recipes = getAdded(curSD.shopMenu, prevSD?.shopMenu);
+            diffInfo.cash = curSD.shopFinancials?.currentBalance || 0;
         }
+
+        // 4. 生成卡片 HTML
+        htmlBuffer += `
+            <div class="dossier-card-fixed archive-card" 
+                 onclick="confirmBranch(${msgObj.message_id}, '${summary.replace(/'/g, "\\'")}')"
+                 style="margin-bottom:20px; cursor:pointer; border:2px solid #deb887; padding:20px; background:#fff; transition:0.2s; position:relative; overflow:hidden;">
+                
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid #f5f5f0; padding-bottom:8px;">
+                    <span style="background:#8b4513; color:#fff; padding:2px 8px; border-radius:4px; font-size:14px; font-family:monospace;">FLOOR #${msgObj.message_id}</span>
+                    <b style="color:#d2691e; font-size:18px;">¥ ${diffInfo.cash}</b>
+                </div>
+
+                <div style="font-size:22px; font-weight:900; color:#333; line-height:1.4; margin:10px 0;">
+                    ${summary === "N/A" ? "未命名剧情节点" : summary}
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr; gap:5px; font-size:16px; color:#666; background:#fdfbf7; padding:10px; border-radius:10px;">
+                    <div style="display:flex; gap:10px;">
+                        <b style="color:#8fbc8f; flex-shrink:0;">🆕 新增原料:</b> 
+                        <span>${diffInfo.ingredients.length > 0 ? diffInfo.ingredients.join('、') : '<span style="color:#ccc;">无变动</span>'}</span>
+                    </div>
+                    <div style="display:flex; gap:10px;">
+                        <b style="color:#deb887; flex-shrink:0;">📖 新增配方:</b> 
+                        <span>${diffInfo.recipes.length > 0 ? diffInfo.recipes.join('、') : '<span style="color:#ccc;">无变动</span>'}</span>
+                    </div>
+                </div>
+                
+                <!-- 装饰：右上角折角效果 -->
+                <div style="position:absolute; top:0; right:0; width:30px; height:30px; background:linear-gradient(225deg, #f5deb3 50%, #fff 50%); shadow: -2px 2px 5px rgba(0,0,0,0.05);"></div>
+            </div>
+        `;
     }
 
-    if (container.innerHTML === "") {
-        container.innerHTML = `<div style="text-align:center; padding:50px; color:#999;">历史记录中没有找到包含游戏数据的楼层。</div>`;
-    }
-    console.groupEnd();
+    container.innerHTML = htmlBuffer || `<div style="text-align:center; padding:50px; color:#999;">未发现有效的剧情存档点。</div>`;
 }
 
+/**
+ * 精准提取 <sum>
+ */
+function parseSumFromRaw(text) {
+    if (!text) return "N/A";
+    const match = text.match(/<sum>([\s\S]*?)<\/sum>/i);
+    return match ? match[1].trim() : "N/A";
+}
+
+/**
+ * 分支确认逻辑
+ */
+function confirmBranch(mid, summary) {
+    // 震动反馈 (可选)
+    if (window.navigator.vibrate) window.navigator.vibrate(50);
+    
+    if (confirm(`🕰️ 确定要回溯到此时间点吗？\n\n剧情摘要：\n"${summary}"\n\n注意：这会创建一个新的分支。`)) {
+        TavernHelper.executeCommand(`/branch-create ${mid}`);
+    }
+}
 /**
  * 摘要解析 (支持 <sum> 标签)
  */
