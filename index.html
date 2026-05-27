@@ -4034,14 +4034,25 @@
         <!-- 全局同步按钮：置于最高层级 -->
 <!-- 全新：小说模式玻璃层 -->
 <!-- 小说模式沉浸层 -->
-<div id="novelGlassLayer" class="novel-glass-container" onclick="nextDialog()">
+<!-- 小说模式沉浸层 -->
+<div id="novelGlassLayer" class="novel-glass-container" 
+     onclick="nextDialog()"
+     onmousedown="onDialogLongPressStart(event)"
+     onmouseup="onDialogLongPressEnd()"
+     onmouseleave="onDialogLongPressEnd()"
+     ontouchstart="onDialogLongPressStart(event)"
+     ontouchend="onDialogLongPressEnd()">
+    
     <!-- 1. 文字滚动区 -->
     <div class="novel-scroll-area">
         <div id="novelBodyMD" class="novel-body-md"></div>
     </div>
     
-    <!-- 2. 右下角输入触发三角形 (event.stopPropagation 防止翻页) -->
-    <div class="novel-input-trigger" title="记录此时的想法" onclick="event.stopPropagation(); openNovelComment();">
+    <!-- 2. 右下角输入触发三角形 (注意：这里需要加 e.stopPropagation 防止触发长按) -->
+    <div class="novel-input-trigger" title="记录此时的想法" 
+         onclick="event.stopPropagation(); openNovelComment();"
+         onmousedown="event.stopPropagation()" 
+         ontouchstart="event.stopPropagation()">
         <div class="novel-triangle"></div>
     </div>
 </div>
@@ -4063,11 +4074,18 @@
 </div>
 
 <!-- 2. 对话框结构微调 (为三角形加 ID) -->
-<div class="gal-dialog-box" id="gameDialog" onclick="nextDialog()">
+<div class="gal-dialog-box" id="gameDialog" 
+     onclick="nextDialog()"
+     onmousedown="onDialogLongPressStart(event)"
+     onmouseup="onDialogLongPressEnd()"
+     onmouseleave="onDialogLongPressEnd()"
+     ontouchstart="onDialogLongPressStart(event)"
+     ontouchend="onDialogLongPressEnd()">
     <div class="gal-name-tag" id="dialogName"></div>
     <div class="gal-text-content" id="dialogText"></div>
     <div class="next-indicator" id="dialogTriangle"></div>
 </div>
+
         <div class="border-area"></div>
 
         <!-- 角色信息框 -->
@@ -5941,8 +5959,11 @@
         if (typeof window.triggerSlash === 'function') {
             return window.triggerSlash(cmd);
         }
+    },
+    async deleteChatMessages(ids, ops = { refresh: 'none' }) {
+        if (typeof window.deleteChatMessages !== 'function') return;
+        return await window.deleteChatMessages(ids, ops);
     }
-
 
 };
 
@@ -5985,69 +6006,47 @@ function updateSyncButtonUI() {
     }
 }
 
-/**
- * 核心：一次性冲刷所有缓存消息并同步给 AI
- */
-/**
- * 核心：静默同步店长决策到酒馆，不触发 UI 滚动
- */
-/**
- * 核心：静默同步店长决策到酒馆
- */
-/**
- * 核心：静默同步店长决策到酒馆
- */
-/**
- * 核心：7步静默执行流实现
- */
-/**
- * 奶茶店专属：7步静默执行流
- */
-/**
- * 核心：7步静默同步流 (奶茶店本土化版)
- */
+
  async function flushTavernBuffer() {
-    // 如果缓冲区没内容，直接返回
     if (tavernMessageBuffer.length === 0) return;
 
-    // --- 步骤 1: 构建提示词 ---
     let modeTag = "【" + (currentNarrativeMode === 'novel' ? "小说" : "对话") + "模式】";
     const promptText = modeTag + "【店长决策汇总】：\n\n" + tavernMessageBuffer.join("\n\n");
 
-    // UI 反馈：开启 Loading 遮罩
     const loader = document.getElementById("devLoading");
     if (loader) {
         loader.style.display = "flex";
         document.querySelector("#devLoading .loading-text").innerText = "正在通过逻辑链路传输决策...";
     }
 
-    // 关键：锁定逻辑位，防止玩家生成期间点击，并告知监听器不要插手
     isStoryFinished = true; 
     window.isManualFlowActive = true; 
 
+    let userMid = null; // 【1. 新增：定义 ID 记录变量】
+
     try {
-        // --- 步骤 2: 创建 USER 消息 (静默) ---
-        // refresh: 'none' 确保酒馆界面不闪烁、不滚动
         await TavernHelper.createChatMessages(
             [{ role: 'user', message: promptText }],
             { refresh: 'none' }
         );
+        
+        userMid = TavernHelper.getLastMessageId(); // 【2. 新增：捕获 User 楼层 ID】
 
-        // 获取当前楼层的变量快照作为解析基础
         const currentData = Mvu.getMvuData({ type: 'message', message_id: getCurrentMessageId() });
 
-        // --- 步骤 3: 调用 generate 生成 AI 回复 ---
-        // 这一步会异步等待 AI 回复完成，返回原始字符串
         const aiRawResponse = await TavernHelper.generate({ user_input: promptText });
-        if (!aiRawResponse) throw new Error("AI 返回内容为空");
+        
+        // 【3. 修改：强化验证，若格式不对直接抛出错误进入 catch】
+        if (!aiRawResponse || !aiRawResponse.includes('<dialogtext>')) {
+            throw new Error("AI 返回格式不规范或内容为空");
+        }
 
-        // --- 步骤 4: 提取 <dialogtext> 标签中的剧情 JSON ---
         const dialogRegex = new RegExp("<dialogtext>\\s*([\\s\\S]*?)\\s*</dialogtext>", "i");
         const dialogMatch = aiRawResponse.match(dialogRegex);
         
         let newDialogData = [];
         if (dialogMatch) {
-            let jsonContent = dialogMatch[1].trim().replace(new RegExp("<!--[\\s\\S]*?-->", "g"), ""); // 剔除注释
+            let jsonContent = dialogMatch[1].trim().replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
             const start = jsonContent.indexOf("[");
             const end = jsonContent.lastIndexOf("]");
             if (start !== -1 && end !== -1) {
@@ -6055,55 +6054,52 @@ function updateSyncButtonUI() {
             }
         }
 
-        // --- 步骤 5: 解析变量命令 (MVU) ---
-        // 在存入数据库前，先通过 Mvu 把数值变动算好
+        // 如果解析出来的剧情是空的，也视为失败
+        if (newDialogData.length === 0) throw new Error("未能解析到剧情数据");
+
         let updatedStatData = currentData;
         if (typeof Mvu?.parseMessage === 'function') {
             const parsedData = await Mvu.parseMessage(aiRawResponse, currentData || { stat_data: {} });
             if (parsedData) updatedStatData = parsedData;
         }
 
-        // --- 步骤 6: 创建 ASSISTANT 楼层消息 (静默) ---
-        // 将 AI 的回复和刚才算好的新变量 data 一起存入楼层，不触发刷新
         const assistantMid = await TavernHelper.createChatMessages(
             [{ role: 'assistant', message: aiRawResponse, data: updatedStatData || void 0 }],
             { refresh: 'none' }
         );
 
-        // 记录最后处理的消息 ID，防止监听器重复加载
         window.lastProcessedId = assistantMid;
 
-        // --- 步骤 7: 刷新前端显示 ---
-        // A. 注入新剧情数组
         if (newDialogData.length > 0) {
             dialogData = newDialogData;
-            dialogIndex = -1; // 重置索引
-            isStoryFinished = false; // 解锁点击
+            dialogIndex = -1; 
+            isStoryFinished = false; 
         }
 
-        // B. 强制刷新本地 JS 的经营数据（金钱、库存等）
         await reloadGameData(assistantMid);
 
-        // C. 清空决策缓冲区
         tavernMessageBuffer = [];
         updateSyncButtonUI();
 
-        // 关闭 Loading 并开启新剧情的第一句
         if (loader) loader.style.display = "none";
-        console.log("✅ 7步同步流完成，开启新剧情。");
+        console.log("✅ 7步同步流完成");
         if (appSettings.pendingScenes && appSettings.pendingScenes.length > 0) {
-            console.log("🎬 检测到待处理场景，正在跳转...");
             await processSceneQueue(); 
         } else {
-            // 如果没有排队场景，才正常播放剧情
             nextDialog(); 
         }
 
     } catch (e) {
-        console.error("❌ 静默同步流执行失败:", e);
+        console.error("❌ 流程失败，启动回退:", e);
+
+        // 【4. 新增：错误回退逻辑 - 物理删除 User 楼层】
+        if (userMid !== null) {
+            await TavernHelper.deleteChatMessages([userMid]);
+        }
+
         if (loader) loader.style.display = "none";
-        isStoryFinished = false; // 出错时解锁，允许重试
-        showSysAlert("逻辑链路发生故障，请检查控制台或重新同步。");
+        isStoryFinished = false; // 解锁
+        showSysAlert("传输失败: " + e.message + "\n决策已保留，请尝试重新同步。");
     } finally {
         window.isManualFlowActive = false;
     }
@@ -13691,6 +13687,76 @@ function confirmBranch(mid, summary) {
         TavernHelper.executeCommand(`/branch-create ${mid}`);
         // 自动刷新页面以应用新分支
         setTimeout(() => location.reload(), 1000);
+    }
+}
+
+let lpTimer = null; 
+
+// 1. 开始计时
+function onDialogLongPressStart(e) {
+    if (isStoryFinished || window.isManualFlowActive) return; 
+    
+    lpTimer = setTimeout(() => {
+        handleRegenerateRequest(); 
+        lpTimer = null;
+    }, 800); 
+}
+
+// 2. 结束/取消计时
+function onDialogLongPressEnd() {
+    if (lpTimer) {
+        clearTimeout(lpTimer);
+        lpTimer = null;
+    }
+}
+
+// 3. 执行重roll
+async function handleRegenerateRequest() {
+    // 获取最后一条 AI 消息
+    const assistantMsgs = TavernHelper.getChatMessages(-1, { role: 'assistant' });
+    if (assistantMsgs.length === 0) return;
+    const lastAssistant = assistantMsgs[assistantMsgs.length - 1];
+    
+    // 获取最后一对消息
+    const lastMid = TavernHelper.getLastMessageId();
+    const allMsgs = TavernHelper.getChatMessages(`0-${lastMid}`);
+    const assistantIdx = allMsgs.findIndex(m => m.message_id === lastAssistant.message_id);
+    const lastUser = (assistantIdx > 0) ? allMsgs[assistantIdx - 1] : null;
+
+    if (!confirm("🔄 确定要撤销本次剧情并重roll吗？\n(这将删除当前楼层并自动重新同步决策)")) return;
+
+    try {
+        const loader = document.getElementById("devLoading");
+        if (loader) {
+            loader.style.display = "flex";
+            document.querySelector("#devLoading .loading-text").innerText = "正在撤销并重新连接时间线...";
+        }
+
+        // A. 删除这一对楼层（AI 和它上面的 User 决策层）
+        let idsToDelete = [lastAssistant.message_id];
+        if (lastUser && lastUser.role === 'user') {
+            idsToDelete.push(lastUser.message_id);
+        }
+        await TavernHelper.deleteChatMessages(idsToDelete);
+
+        // B. 还原决策到缓冲区
+        if (lastUser && lastUser.role === 'user') {
+            const oldPrompt = lastUser.message;
+            // 提取出【店长决策汇总】：之后的内容
+            const decisionPart = oldPrompt.split('【店长决策汇总】：')[1] || "";
+            if (decisionPart) {
+                // 将旧决策拆分回篮子
+                tavernMessageBuffer = decisionPart.trim().split('\n\n').filter(Boolean);
+                updateSyncButtonUI();
+                
+                // C. 自动重新触发同步生成
+                await flushTavernBuffer();
+            }
+        }
+    } catch (e) {
+        console.error(e);
+        if (document.getElementById("devLoading")) document.getElementById("devLoading").style.display = "none";
+        alert("重roll失败: " + e.message);
     }
 }
 </script>
