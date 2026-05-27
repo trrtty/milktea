@@ -8016,31 +8016,64 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
 /**
  * 统一解析器：从原始文本中提取最新的剧情 JSON
  */
+/**
+ * 调试强化版解析器：会在控制台详细输出捕获过程
+ */
  function parseDialogTextFromRaw(rawText) {
-    if (!rawText) return [];
-    // 1. 全局匹配所有 <dialogtext> 标签 (gi 表示全局且忽略大小写)
+    console.group("🔍 剧情捕获流水线"); // 在控制台开启一个日志组
+    console.log("1. 待扫描文本长度:", rawText?.length || 0);
+
+    if (!rawText) {
+        console.warn("❌ 文本为空，跳过捕获");
+        console.groupEnd();
+        return [];
+    }
+
+    // 使用 gi 确保捕获所有标签且忽略大小写
     const regex = /<dialogtext>([\s\S]*?)<\/dialogtext>/gi;
     const matches = Array.from(rawText.matchAll(regex));
     
-    if (matches.length === 0) return [];
+    if (matches.length === 0) {
+        console.warn("❌ [匹配结果]: 未在文本中发现 <dialogtext> 标签");
+        // 打印前100个字符看看原文大概长啥样
+        console.log("原文预览(前100字):", rawText.substring(0, 100));
+        console.groupEnd();
+        return [];
+    }
 
-    // 2. 永远取最后一对匹配项
-    let content = matches[matches.length - 1][1].trim();
+    console.log(`2. [匹配结果]: 共发现 ${matches.length} 对标签`);
+
+    // 永远取最后一对匹配项
+    let rawContent = matches[matches.length - 1][1].trim();
+    console.log("3. [提取原始内容]:", rawContent);
+
+    // 清理掉 AI 可能乱加的 HTML 注释
+    rawContent = rawContent.replace(/<!--[\s\S]*?-->/g, "");
     
-    // 3. 清理掉注释和废话，定位 JSON
-    content = content.replace(/<!--[\s\S]*?-->/g, ""); 
-    const start = content.indexOf('[');
-    const end = content.lastIndexOf(']');
+    // 精准定位 JSON 数组
+    const start = rawContent.indexOf('[');
+    const end = rawContent.lastIndexOf(']');
     
     if (start !== -1 && end !== -1) {
+        const jsonStr = rawContent.substring(start, end + 1);
+        console.log("4. [定位 JSON 字符串]:", jsonStr);
         try {
-            return JSON.parse(content.substring(start, end + 1));
+            const parsed = JSON.parse(jsonStr);
+            console.log("✅ [最终成功]: 成功解析出 " + parsed.length + " 条对话");
+            console.groupEnd();
+            return parsed;
         } catch (e) {
-            console.error("❌ 剧情JSON解析失败:", e);
+            console.error("❌ [最终失败]: JSON 语法错误!", e.message);
+            console.groupEnd();
+            return [];
         }
+    } else {
+        console.error("❌ [最终失败]: 标签内虽然有内容，但找不到 [ ] 数组结构！");
+        console.groupEnd();
+        return [];
     }
-    return [];
 }
+
 async function syncLatestContent() {
     try {
         // 1. 获取全量 Assistant 消息，取最后 5 条进行扫描
