@@ -4159,21 +4159,7 @@
     </div>
 </div>
 
-<!-- 新增：读档大厅全屏层 -->
-<div id="layer-archive" class="popup-layer" style="z-index: 1200; background: #fdfbf7;">
-    <div class="popup-header">
-        <button class="back-btn" onclick="closeLayer('layer-archive')">❮ 返回设置</button>
-        <div class="popup-title">时光回溯 / 读档中心</div>
-    </div>
-    <div class="popup-content">
-        <p style="color:#949f9f; font-size:16px; font-style:italic; margin-bottom:20px; padding:0 10px;">
-            温馨提示：点击任意节点将创建新的分支剧情，当前分支进度将保留在原时间线上。
-        </p>
-        <div id="archive-list-container" style="display: flex; flex-direction: column; gap: 20px; padding-bottom:100px;">
-            <!-- 读档列表将在这里渲染 -->
-        </div>
-    </div>
-</div>
+
               <!-- 背景选择：增加折叠功能 -->
               <div class="admin-section-label" onclick="toggleSection('bg-select-area', 'bg-arrow')" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; padding-right:15px;">
                   <span>VISUAL / 奶茶杯全局背景</span>
@@ -4226,7 +4212,21 @@
           
       </div>
 
-
+<!-- 新增：读档大厅全屏层 -->
+<div id="layer-archive" class="popup-layer" style="z-index: 1200; background: #fdfbf7;">
+    <div class="popup-header">
+        <button class="back-btn" onclick="closeLayer('layer-archive')">❮ 返回设置</button>
+        <div class="popup-title">时光回溯 / 读档中心</div>
+    </div>
+    <div class="popup-content">
+        <p style="color:#949f9f; font-size:16px; font-style:italic; margin-bottom:20px; padding:0 10px;">
+            温馨提示：点击任意节点将创建新的分支剧情，当前分支进度将保留在原时间线上。
+        </p>
+        <div id="archive-list-container" style="display: flex; flex-direction: column; gap: 20px; padding-bottom:100px;">
+            <!-- 读档列表将在这里渲染 -->
+        </div>
+    </div>
+</div>
         <div
           id="layer-collection"
           class="popup-layer"
@@ -8275,6 +8275,8 @@ eventOn(tavern_events.MESSAGE_RECEIVED, (mid, type) => {
         console.log("🔔 检测到消息变动，执行 init() 刷新剧情...");
         init(); 
     }
+
+    setupRegenerateListener();
 });
 
 
@@ -13705,6 +13707,137 @@ function confirmBranch(mid, summary) {
         setTimeout(() => location.reload(), 1000);
     }
 }
+
+
+// ==========================================
+// 重roll 功能核心代码开始
+// ==========================================
+
+/**
+ * 核心重roll逻辑：删除最后一楼AI回复，重新发送指令
+ */
+ async function handleRegenerateTurn() {
+    // 1. 显示加载动画
+    const loader = document.getElementById("devLoading");
+    if (loader) {
+        loader.style.display = "flex";
+        document.querySelector("#devLoading .loading-text").innerText = "正在干扰时间线，重塑因果...";
+    }
+
+    try {
+        // 2. 获取最后一楼（AI回复的那一楼）
+        const lastMid = TavernHelper.getLastMessageId();
+        const msgs = TavernHelper.getChatMessages(lastMid);
+        
+        if (!msgs || msgs.length === 0 || msgs[0].role !== 'assistant') {
+            alert("❌ 无法重来：最后一楼不是 AI 的回复，或者找不到消息。");
+            if (loader) loader.style.display = "none";
+            return;
+        }
+
+        // 3. 寻找上一楼（User指令的那一楼）
+        const userMid = lastMid - 1;
+        const userMsgs = TavernHelper.getChatMessages(userMid);
+        
+        if (!userMsgs || userMsgs.length === 0 || userMsgs[0].role !== 'user') {
+            alert("❌ 溯源失败：找不到原始指令。");
+            if (loader) loader.style.display = "none";
+            return;
+        }
+
+        // 暂存玩家当时的指令和数据“接力棒”
+        const originalPrompt = userMsgs[0].message;
+        const previousData = userMsgs[0].data;
+
+        console.log(`🔄 执行重roll。删除 AI 楼层: ${lastMid}`);
+
+        // 4. 执行物理删除（删除酒馆里那条不想要的 AI 回复）
+        if (typeof window.deleteChatMessages === 'function') {
+            await window.deleteChatMessages([lastMid], {});
+        }
+
+        // 5. 让 AI 重新生成
+        const aiRawResponse = await TavernHelper.generate({ user_input: originalPrompt });
+        
+        if (!aiRawResponse || !aiRawResponse.includes('<content>')) {
+            alert("❌ AI 响应格式错误，请手动在酒馆重试。");
+            if (loader) loader.style.display = "none";
+            return;
+        }
+
+        // 6. 解析新的变量变动 (MVU)
+        let updatedData = previousData;
+        if (typeof Mvu?.parseMessage === 'function') {
+            updatedData = await Mvu.parseMessage(aiRawResponse, previousData || { stat_data: {} });
+        }
+
+        // 7. 在酒馆创建新的 AI 楼层
+        const newMid = await TavernHelper.createChatMessages(
+            [{ role: 'assistant', message: aiRawResponse, data: updatedData || void 0 }],
+            { refresh: 'none' }
+        );
+
+        // 8. 刷新你的界面 UI
+        window.lastProcessedId = newMid;
+        await reloadGameData(newMid);
+        
+        // 重新加载剧情对白
+        const newDialog = parseDialogTextFromRaw(aiRawResponse);
+        if (newDialog.length > 0) {
+            dialogData = newDialog;
+            dialogIndex = -1;
+            nextDialog();
+        }
+
+        if (loader) loader.style.display = "none";
+        console.log("✅ 时间回溯成功！");
+
+    } catch (e) {
+        console.error("❌ 重roll失败:", e);
+        if (loader) loader.style.display = "none";
+        alert("系统异常：时间流向发生了紊乱，请刷新页面。");
+    }
+}
+
+/**
+ * 设置长按监听器
+ */
+function setupRegenerateListener() {
+    let pressTimer;
+    const timeBox = document.querySelector(".time-info");
+
+    if (!timeBox) return;
+
+    // 鼠标或手指按下
+    const startPress = (e) => {
+        // e.preventDefault(); // 小白注意：如果这行导致点击失灵，可以把它删掉
+        timeBox.style.background = "#fff5f6"; // 颜色变淡，提示正在生效
+        pressTimer = setTimeout(() => {
+            if (confirm("✨ 确定要让时间倒流吗？\n(这将删除当前回复并重新生成)")) {
+                handleRegenerateTurn();
+            }
+        }, 1000); // 1秒算长按
+    };
+
+    // 弹起或离开
+    const cancelPress = () => {
+        clearTimeout(pressTimer);
+        timeBox.style.background = "#ffffff"; // 恢复白色
+    };
+
+    // 绑定鼠标事件
+    timeBox.addEventListener("mousedown", startPress);
+    timeBox.addEventListener("mouseup", cancelPress);
+    timeBox.addEventListener("mouseleave", cancelPress);
+    
+    // 绑定手机触摸事件
+    timeBox.addEventListener("touchstart", startPress);
+    timeBox.addEventListener("touchend", cancelPress);
+}
+
+// ==========================================
+// 重roll 功能核心代码结束
+// ==========================================
 </script>
   </body>
 </html>
