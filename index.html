@@ -6026,20 +6026,18 @@ function updateSyncButtonUI() {
     window.isManualFlowActive = true; 
 
     try {
-      const lastMid = TavernHelper.getLastMessageId();
-    const lastMsgs = TavernHelper.getChatMessages(lastMid);
-    const heritageData = (lastMsgs && lastMsgs.length > 0) ? lastMsgs[0].data : null;
+        // --- 步骤 2: 创建 USER 消息 (静默) ---
+        // refresh: 'none' 确保酒馆界面不闪烁、不滚动
+        await TavernHelper.createChatMessages(
+            [{ role: 'user', message: promptText }],
+            { refresh: 'none' }
+        );
 
-    // 【修复 2】：创建用户消息时，必须把 heritageData 传进去
-    await TavernHelper.createChatMessages(
-        [{ role: 'user', message: promptText, data: heritageData || void 0 }], 
-        { refresh: 'none' }
-    );
-
-
+        // 获取当前楼层的变量快照作为解析基础
         const currentData = Mvu.getMvuData({ type: 'message', message_id: getCurrentMessageId() });
 
-
+        // --- 步骤 3: 调用 generate 生成 AI 回复 ---
+        // 这一步会异步等待 AI 回复完成，返回原始字符串
         const aiRawResponse = await TavernHelper.generate({ user_input: promptText });
         if (!aiRawResponse) throw new Error("AI 返回内容为空");
 
@@ -12402,7 +12400,7 @@ async function submitReview() {
 
     try {
         await waitGlobalInitialized("Mvu");
-        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: getCurrentMessageId() });
+        const fullMvuObject = await getFullCumulativeState(); 
         const timeStr = "刚刚";
 
         if (!mvuData.stat_data.phoneShopDB) mvuData.stat_data.phoneShopDB = phoneShopDB;
@@ -13068,7 +13066,7 @@ function openNovelComment() {
 async function saveShopDataToMvu() {
     try {
         await waitGlobalInitialized("Mvu");
-        const mvuData = Mvu.getMvuData({ type: "message", message_id: getCurrentMessageId() });
+        const mvuData = await getFullCumulativeState();
         if (!mvuData.stat_data) mvuData.stat_data = {};
 
         // 1. 同步所有基础数据
@@ -13694,6 +13692,27 @@ function confirmBranch(mid, summary) {
         // 自动刷新页面以应用新分支
         setTimeout(() => location.reload(), 1000);
     }
+}
+
+// 深度回溯获取全量 MVU 数据
+async function getFullCumulativeState() {
+    try {
+        const lastMid = TavernHelper.getLastMessageId();
+        // 从最后一条消息开始往回找，最多找20层
+        for (let i = lastMid; i >= 0; i--) {
+            const data = Mvu.getMvuData({ type: 'message', message_id: i });
+            // 如果这一层有 stat_data 且里面有关键数据库（比如论坛）
+            if (data && data.stat_data && Object.keys(data.stat_data).length > 0) {
+                console.log(`🎯 找到最新存档点：楼层 #${i}`);
+                // 返回一份深拷贝，防止直接修改历史引用的对象
+                return JSON.parse(JSON.stringify(data));
+            }
+        }
+    } catch (e) {
+        console.warn("回溯存档失败，使用基础数据", e);
+    }
+    // 如果没有任何楼层有数据，则返回空对象（此时会读取世界书默认值）
+    return { stat_data: {} };
 }
 </script>
   </body>
