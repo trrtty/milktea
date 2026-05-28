@@ -4088,7 +4088,13 @@
         <!-- 找到 top-info 这一块，修改中间的 shop-name -->
         <div class="top-info">
             
-          <div class="time-info"></div>
+<!-- 增加了 style 让它变小手，并直接加上了按下和抬起的触发指令 -->
+<div class="time-info" 
+     style="cursor: pointer; pointer-events: auto; position: relative; z-index: 9999;" 
+     onpointerdown="startRegenTimer()" 
+     onpointerup="cancelRegenTimer()" 
+     onpointerleave="cancelRegenTimer()">
+</div>
 
           <!-- 核心修改：添加了 onclick="openShopAdmin()" 和鼠标手势样式 -->
           <div
@@ -13802,39 +13808,35 @@ function confirmBranch(mid, summary) {
 /**
  * 设置长按监听器
  */
-function setupRegenerateListener() {
-    let pressTimer;
-    const timeBox = document.querySelector(".time-info");
+ let regenTimer; // 计时器变量
 
-    if (!timeBox) return;
-
-    // 鼠标或手指按下
-    const startPress = (e) => {
-        // e.preventDefault(); // 小白注意：如果这行导致点击失灵，可以把它删掉
-        timeBox.style.background = "#fff5f6"; // 颜色变淡，提示正在生效
-        pressTimer = setTimeout(() => {
-            if (confirm("✨ 确定要让时间倒流吗？\n(这将删除当前回复并重新生成)")) {
-                handleRegenerateTurn();
-            }
-        }, 1000); // 1秒算长按
-    };
-
-    // 弹起或离开
-    const cancelPress = () => {
-        clearTimeout(pressTimer);
-        timeBox.style.background = "#ffffff"; // 恢复白色
-    };
-
-    // 绑定鼠标事件
-    timeBox.addEventListener("mousedown", startPress);
-    timeBox.addEventListener("mouseup", cancelPress);
-    timeBox.addEventListener("mouseleave", cancelPress);
+// 当手指/鼠标按下去时触发
+function startRegenTimer() {
+    const el = document.querySelector(".time-info");
+    if (el) {
+        el.style.background = "#ff6b81"; // 按下变红
+        el.style.transform = "scale(0.9)"; // 按下缩小
+    }
     
-    // 绑定手机触摸事件
-    timeBox.addEventListener("touchstart", startPress);
-    timeBox.addEventListener("touchend", cancelPress);
+    // 开启 1 秒倒计时
+    regenTimer = setTimeout(() => {
+        // 时间到了，恢复样式并弹窗
+        cancelRegenTimer(); 
+        if (confirm("🕰️ 确定要让时间倒流（重roll）吗？")) {
+            handleRegenerateTurn();
+        }
+    }, 1000);
 }
 
+// 当手指/鼠标松开或离开时触发
+function cancelRegenTimer() {
+    clearTimeout(regenTimer); // 停止计时
+    const el = document.querySelector(".time-info");
+    if (el) {
+        el.style.background = "#ffffff"; // 恢复白色
+        el.style.transform = "scale(1)"; // 恢复大小
+    }
+}
 // ==========================================
 // 重roll 功能核心代码结束
 // ==========================================
