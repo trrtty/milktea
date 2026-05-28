@@ -4091,9 +4091,7 @@
 <!-- 增加了 style 让它变小手，并直接加上了按下和抬起的触发指令 -->
 <div class="time-info" 
      style="cursor: pointer; pointer-events: auto; position: relative; z-index: 9999;" 
-     onpointerdown="startRegenTimer()" 
-     onpointerup="cancelRegenTimer()" 
-     onpointerleave="cancelRegenTimer()">
+     onclick="triggerRegenerateClick()">
 </div>
 
           <!-- 核心修改：添加了 onclick="openShopAdmin()" 和鼠标手势样式 -->
@@ -5991,27 +5989,13 @@ function updateSyncButtonUI() {
     }
 }
 
-/**
- * 核心：一次性冲刷所有缓存消息并同步给 AI
- */
-/**
- * 核心：静默同步店长决策到酒馆，不触发 UI 滚动
- */
-/**
- * 核心：静默同步店长决策到酒馆
- */
-/**
- * 核心：静默同步店长决策到酒馆
- */
-/**
- * 核心：7步静默执行流实现
- */
-/**
- * 奶茶店专属：7步静默执行流
- */
-/**
- * 核心：7步静默同步流 (奶茶店本土化版)
- */
+// 点击时间框触发重roll
+function triggerRegenerateClick() {
+    // 为了防止手滑误点导致剧情丢失，还是保留一个确认框比较稳妥
+    if (confirm("🕰️ 检测到时空波动：确定要让时间倒流（重roll）吗？")) {
+        handleRegenerateTurn();
+    }
+}
  async function flushTavernBuffer() {
     // 如果缓冲区没内容，直接返回
     if (tavernMessageBuffer.length === 0) return;
@@ -8282,7 +8266,7 @@ eventOn(tavern_events.MESSAGE_RECEIVED, (mid, type) => {
         init(); 
     }
 
-    setupRegenerateListener();
+
 });
 
 
@@ -13715,13 +13699,6 @@ function confirmBranch(mid, summary) {
 }
 
 
-// ==========================================
-// 重roll 功能核心代码开始
-// ==========================================
-
-/**
- * 核心重roll逻辑：删除最后一楼AI回复，重新发送指令
- */
  async function handleRegenerateTurn() {
     // 1. 显示加载动画
     const loader = document.getElementById("devLoading");
@@ -13805,41 +13782,7 @@ function confirmBranch(mid, summary) {
     }
 }
 
-/**
- * 设置长按监听器
- */
- let regenTimer; // 计时器变量
 
-// 当手指/鼠标按下去时触发
-function startRegenTimer() {
-    const el = document.querySelector(".time-info");
-    if (el) {
-        el.style.background = "#ff6b81"; // 按下变红
-        el.style.transform = "scale(0.9)"; // 按下缩小
-    }
-    
-    // 开启 1 秒倒计时
-    regenTimer = setTimeout(() => {
-        // 时间到了，恢复样式并弹窗
-        cancelRegenTimer(); 
-        if (confirm("🕰️ 确定要让时间倒流（重roll）吗？")) {
-            handleRegenerateTurn();
-        }
-    }, 1000);
-}
-
-// 当手指/鼠标松开或离开时触发
-function cancelRegenTimer() {
-    clearTimeout(regenTimer); // 停止计时
-    const el = document.querySelector(".time-info");
-    if (el) {
-        el.style.background = "#ffffff"; // 恢复白色
-        el.style.transform = "scale(1)"; // 恢复大小
-    }
-}
-// ==========================================
-// 重roll 功能核心代码结束
-// ==========================================
 </script>
   </body>
 </html>
