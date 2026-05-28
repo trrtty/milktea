@@ -4126,12 +4126,13 @@
 
         <div class="character-container">
             <div id="aiGlitchLayer" class="glitch-overlay"></div>
-          <img
+            <img
             id="baseCharImg"
             src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
             alt=""
             class="character-image"
-          />
+            style="display: none;" 
+        />
           <!-- 顶层：心情/表情叠加层 -->
 <!-- 替换为表情图层容器 -->
 <div id="moodLayersContainer" class="character-container" style="z-index: 5; background: none; left:0; right:0; bottom:0; height:100%;">
@@ -12988,10 +12989,19 @@ function syncStoryUI(data) {
     }
     // --- 【Bug 修复结束】 ---
     else {
-    if (baseImg) baseImg.style.display = "none"; // 彻底隐藏，不给 iOS 显示问号的机会
-    if (moodContainer) moodContainer.style.display = "none";
-    if (uiInfoBox) uiInfoBox.style.display = "none";
-    currentActiveCustomerId = ""; // 清空当前角色记录
+      if (!currentActiveCustomerId) {
+        // 如果场上没人（剧情刚开始，或人刚走），旁白说话时彻底隐藏图片标签，防止 iOS 出现问号
+        baseImg.style.display = "none";
+        if (uiInfoBox) uiInfoBox.style.display = "none";
+    } else {
+        // 如果场上已经有人了，维持 block 状态，立绘会自然“继承”显示在屏幕上
+        baseImg.style.display = "block";
+    }
+    
+    // 顺便处理下表情容器，没人就关掉
+    if (!currentActiveCustomerId && moodContainer) {
+        moodContainer.style.display = "none";
+    }
 }
     if (data.action === "leave") {
         currentActiveCustomerId = "";
