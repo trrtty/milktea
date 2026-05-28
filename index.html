@@ -6026,18 +6026,20 @@ function updateSyncButtonUI() {
     window.isManualFlowActive = true; 
 
     try {
-        // --- 步骤 2: 创建 USER 消息 (静默) ---
-        // refresh: 'none' 确保酒馆界面不闪烁、不滚动
-        await TavernHelper.createChatMessages(
-            [{ role: 'user', message: promptText }],
-            { refresh: 'none' }
-        );
+      const lastMid = TavernHelper.getLastMessageId();
+    const lastMsgs = TavernHelper.getChatMessages(lastMid);
+    const heritageData = (lastMsgs && lastMsgs.length > 0) ? lastMsgs[0].data : null;
 
-        // 获取当前楼层的变量快照作为解析基础
+    // 【修复 2】：创建用户消息时，必须把 heritageData 传进去
+    await TavernHelper.createChatMessages(
+        [{ role: 'user', message: promptText, data: heritageData || void 0 }], 
+        { refresh: 'none' }
+    );
+
+
         const currentData = Mvu.getMvuData({ type: 'message', message_id: getCurrentMessageId() });
 
-        // --- 步骤 3: 调用 generate 生成 AI 回复 ---
-        // 这一步会异步等待 AI 回复完成，返回原始字符串
+
         const aiRawResponse = await TavernHelper.generate({ user_input: promptText });
         if (!aiRawResponse) throw new Error("AI 返回内容为空");
 
@@ -12400,7 +12402,7 @@ async function submitReview() {
 
     try {
         await waitGlobalInitialized("Mvu");
-        const mvuData = Mvu.getMvuData({ type: "message", message_id: getCurrentMessageId() });
+        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: getCurrentMessageId() });
         const timeStr = "刚刚";
 
         if (!mvuData.stat_data.phoneShopDB) mvuData.stat_data.phoneShopDB = phoneShopDB;
