@@ -12930,6 +12930,7 @@ let currentSpeakerName = "";
 // 在全局变量区域定义这个，用于拼接表情路径
 
 
+
 function syncStoryUI(data) {
     const novelLayer = document.getElementById("novelGlassLayer");
     const novelBody = document.getElementById("novelBodyMD");
@@ -12989,8 +12990,7 @@ function syncStoryUI(data) {
     }
     // --- 【Bug 修复结束】 ---
 
-
-if (data.action === "leave") {
+    if (data.action === "leave") {
         currentActiveCustomerId = "";
         currentSpeakerName = "";
         if (baseImg) baseImg.style.display = 'none';
@@ -13054,6 +13054,8 @@ if (data.action === "leave") {
     }
 }
 // 统一决策呼出逻辑
+
+
 function openDecisionModal() {
     const choiceBox = document.getElementById("choiceOverlay");
     document.getElementById("fixedOptions").style.display = "none";
@@ -13670,11 +13672,24 @@ function toggleFullScreen() {
 /**
  * 摘要解析
  */
-function parseSumFromRaw(text) {
-    const match = text.match(/<sum>([\s\S]*?)<\/sum>/i);
-    return match ? match[1].trim() : "未命名的剧情点";
-}
+/**
+ * 摘要解析：精准提取消息中最后一对 <sum> 标签的内容
+ */
+ function parseSumFromRaw(text) {
+    if (!text) return "未命名的剧情点";
 
+    // 使用全局匹配模式 'g' 来寻找所有的 <sum> 标签
+    const regex = /<sum>([\s\S]*?)<\/sum>/gi;
+    const matches = Array.from(text.matchAll(regex));
+
+    if (matches.length > 0) {
+        // 取匹配数组中的最后一个元素 [matches.length - 1]
+        // [1] 代表取标签内部的括号内容（即摘要正文）
+        return matches[matches.length - 1][1].trim();
+    }
+
+    return "未命名的剧情点";
+}
 /**
  * 分支跳转执行
  */
