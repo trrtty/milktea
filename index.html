@@ -10554,7 +10554,7 @@ async function sendPhoneMsg() {
     const newMsg = { type: "sent", text: text };
     chatData.history.push(newMsg);
     chatData.lastMsg = text;
-    chatData.time = "刚刚";
+    chatData.time = `${worldConfig.year}年-${worldConfig.season}-${worldConfig.time}`;
 
     const b = document.createElement("div");
     b.className = "bubble sent";
@@ -12402,7 +12402,7 @@ async function submitReview() {
     try {
         await waitGlobalInitialized("Mvu");
         const mvuData = Mvu.getMvuData({ type: "message", message_id: TavernHelper.getLastMessageId() });
-        const timeStr = "刚刚";
+        const timeStr = `${worldConfig.year}年-${worldConfig.season}-${worldConfig.time}`;
 
         if (!mvuData.stat_data.phoneShopDB) mvuData.stat_data.phoneShopDB = phoneShopDB;
         if (!mvuData.stat_data.phoneForumDB) mvuData.stat_data.phoneForumDB = phoneForumDB;
@@ -12987,7 +12987,12 @@ function syncStoryUI(data) {
         }
     }
     // --- 【Bug 修复结束】 ---
-
+    else {
+    if (baseImg) baseImg.style.display = "none"; // 彻底隐藏，不给 iOS 显示问号的机会
+    if (moodContainer) moodContainer.style.display = "none";
+    if (uiInfoBox) uiInfoBox.style.display = "none";
+    currentActiveCustomerId = ""; // 清空当前角色记录
+}
     if (data.action === "leave") {
         currentActiveCustomerId = "";
         currentSpeakerName = "";
