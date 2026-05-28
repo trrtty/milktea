@@ -6026,15 +6026,24 @@ function updateSyncButtonUI() {
     window.isManualFlowActive = true; 
 
     try {
-        // --- 步骤 2: 创建 USER 消息 (静默) ---
-        // refresh: 'none' 确保酒馆界面不闪烁、不滚动
+        // --- 【核心修复：抓取接力棒】 ---
+        const lastMid = TavernHelper.getLastMessageId();
+        const lastMvu = Mvu.getMvuData({ type: 'message', message_id: lastMid });
+        const lastData = lastMvu ? lastMvu.stat_data : null;
+
+        // 创建新消息时，把上楼的数据注入 data 字段
         await TavernHelper.createChatMessages(
-            [{ role: 'user', message: promptText }],
+            [{ 
+                role: 'user', 
+                message: promptText,
+                data: lastData ? { stat_data: lastData } : undefined // 👈 关键：继承上一楼的数据
+            }],
             { refresh: 'none' }
         );
 
+
         // 获取当前楼层的变量快照作为解析基础
-        const currentData = Mvu.getMvuData({ type: 'message', message_id: getCurrentMessageId() });
+        const currentData = Mvu.getMvuData({ type: 'message', message_id: TavernHelper.getLastMessageId() });
 
         // --- 步骤 3: 调用 generate 生成 AI 回复 ---
         // 这一步会异步等待 AI 回复完成，返回原始字符串
@@ -8204,7 +8213,7 @@ console.log("👤 玩家身份已识别:", playerName);
 
     // 3. 【核心修复】从本楼层提取剧情对白 (处理注释和 JSON 截取)
     try {
-        const mid = getCurrentMessageId();
+        const mid = TavernHelper.getLastMessageId();
         const msgs = TavernHelper.getChatMessages(mid); // 只看本楼层
 
         if (msgs && msgs.length > 0) {
@@ -9925,7 +9934,7 @@ let tStars = Math.max(0, 5 - balancePenalty / 5).toFixed(1);
     // 4. 保存到云端 (MVU)
     try {
         await waitGlobalInitialized("Mvu");
-        const mvuData = Mvu.getMvuData({ type: "message", message_id: getCurrentMessageId() });
+        const mvuData = Mvu.getMvuData({ type: "message", message_id: TavernHelper.getLastMessageId() });
 
         const tempStats = {
             name: isAiEnabled ? '正在等待 AI 命名...' : '新研发奶茶',
@@ -9956,7 +9965,7 @@ let tStars = Math.max(0, 5 - balancePenalty / 5).toFixed(1);
         }
         mvuData.stat_data.appSettings = appSettings;
 
-        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: getCurrentMessageId() });
+        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: TavernHelper.getLastMessageId() });
 
         // 5. 【分支跳转逻辑】
         if (isAiEnabled) {
@@ -10047,7 +10056,7 @@ function startTipRotation() {
 
     try {
         await waitGlobalInitialized("Mvu");
-        const mvuData = Mvu.getMvuData({ type: "message", message_id: getCurrentMessageId() });
+        const mvuData = Mvu.getMvuData({ type: "message", message_id: TavernHelper.getLastMessageId() });
 
         // 3. 更新云端配方库
         if (!mvuData.stat_data.shopMenu) mvuData.stat_data.shopMenu = {};
@@ -10065,7 +10074,7 @@ function startTipRotation() {
         mvuData.stat_data.tempDrinkStats = defaultStats;
 
         // 6. 执行持久化保存
-        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: getCurrentMessageId() });
+        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: TavernHelper.getLastMessageId() });
         
         // 7. 同步本地内存变量
         shopMenu[newName] = finalProduct;
@@ -10744,14 +10753,14 @@ async function confirmTaskSubmission() {
     // 5. 持久化到云端存档 (MVU)
     try {
         await waitGlobalInitialized("Mvu");
-        const mvuData = Mvu.getMvuData({ type: "message", message_id: getCurrentMessageId() });
+        const mvuData = Mvu.getMvuData({ type: "message", message_id: TavernHelper.getLastMessageId() });
         
         if (!mvuData.stat_data) mvuData.stat_data = {};
         mvuData.stat_data.phoneMatchDB = phoneMatchDB;
         mvuData.stat_data.phoneTaskDB = phoneTaskDB;
         mvuData.stat_data.appSettings = appSettings;
 
-        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: getCurrentMessageId() });
+        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: TavernHelper.getLastMessageId() });
 
         // 6. UI 反馈
         closeLayer('layer-menu'); // 关闭配方列表
@@ -11775,7 +11784,7 @@ async function unlockNewIngredient(ingredientData) {
 
     try {
         await waitGlobalInitialized("Mvu");
-        const mvuData = Mvu.getMvuData({ type: "message", message_id: getCurrentMessageId() });
+        const mvuData = Mvu.getMvuData({ type: "message", message_id: TavernHelper.getLastMessageId() });
         
         if (!mvuData.stat_data.unlockedIngredients) mvuData.stat_data.unlockedIngredients = {};
         
@@ -11788,7 +11797,7 @@ async function unlockNewIngredient(ingredientData) {
         mvuData.stat_data.unlockedIngredientListStr = allNames; 
 
         // 3. 提交
-        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: getCurrentMessageId() });
+        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: TavernHelper.getLastMessageId() });
         console.log("✅ 原料名字列表已更新:", allNames);
         
     } catch (e) { console.error(e); }
@@ -11944,7 +11953,7 @@ async function setShowcase(key) {
     // 4. 【云端同步】将修改后的所有数据库一次性存入 MVU
     try {
         await waitGlobalInitialized("Mvu");
-        const mvuData = Mvu.getMvuData({ type: "message", message_id: getCurrentMessageId() });
+        const mvuData = Mvu.getMvuData({ type: "message", message_id: TavernHelper.getLastMessageId() });
 
         if (!mvuData.stat_data) mvuData.stat_data = {};
         
@@ -11953,7 +11962,7 @@ async function setShowcase(key) {
         mvuData.stat_data.phoneShopDB = phoneShopDB;
         mvuData.stat_data.shopConfig = shopConfig;
 
-        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: getCurrentMessageId() });
+        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: TavernHelper.getLastMessageId() });
         console.log("💾 MVU 存档同步成功：主推与点评招牌已锁定。");
 
         // 5. 【UI 刷新】
@@ -12152,10 +12161,10 @@ async function updateAppBackground(bgName) {
     // 4. 持久化保存 (MVU)
     try {
         await waitGlobalInitialized("Mvu");
-        const mvuData = Mvu.getMvuData({ type: "message", message_id: getCurrentMessageId() });
+        const mvuData = Mvu.getMvuData({ type: "message", message_id: TavernHelper.getLastMessageId() });
         if (!mvuData.stat_data) mvuData.stat_data = {};
         mvuData.stat_data.appSettings = appSettings; // 保存到存档
-        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: getCurrentMessageId() });
+        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: TavernHelper.getLastMessageId() });
     } catch (e) { console.error("保存设置失败:", e); }
     
     console.log("奶茶背景已更新为:", bgName || "无");
@@ -12342,7 +12351,7 @@ async function executeMasterUnlock() {
 
     try {
         await waitGlobalInitialized("Mvu");
-        const mvuData = Mvu.getMvuData({ type: "message", message_id: getCurrentMessageId() });
+        const mvuData = Mvu.getMvuData({ type: "message", message_id: TavernHelper.getLastMessageId() });
 
         // 1. 遍历母库 (ingredientsDB)，将其全部注入内存变量 unlockedIngredients
         ingredientsDB.forEach(item => {
@@ -12372,7 +12381,7 @@ async function executeMasterUnlock() {
         mvuData.stat_data.unlockedIngredientListStr = allNames;
 
         // 4. 持久化保存
-        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: getCurrentMessageId() });
+        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: TavernHelper.getLastMessageId() });
 
         // 5. 刷新相关 UI
         if (typeof initDevInterface === 'function') initDevInterface(); // 刷新研发室列表
@@ -12400,7 +12409,7 @@ async function submitReview() {
 
     try {
         await waitGlobalInitialized("Mvu");
-        const fullMvuObject = await getFullCumulativeState(); 
+        const mvuData = Mvu.getMvuData({ type: "message", message_id: TavernHelper.getLastMessageId() });
         const timeStr = "刚刚";
 
         if (!mvuData.stat_data.phoneShopDB) mvuData.stat_data.phoneShopDB = phoneShopDB;
@@ -12464,7 +12473,7 @@ async function submitReview() {
             phoneShopDB = mvuData.stat_data.phoneShopDB;
         }
 
-        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: getCurrentMessageId() });
+        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: TavernHelper.getLastMessageId() });
         await performForumCleanup();
         closeCommentModal();
 
@@ -13065,10 +13074,14 @@ function openNovelComment() {
 }
 async function saveShopDataToMvu() {
     try {
-        await waitGlobalInitialized("Mvu");
-        const mvuData = await getFullCumulativeState();
+      await waitGlobalInitialized("Mvu");
+        
+        // 【统一使用】获取最后一楼的 ID
+        const lastMid = TavernHelper.getLastMessageId();
+        
+        // 获取最后一楼的现有数据
+        const mvuData = Mvu.getMvuData({ type: "message", message_id: lastMid });
         if (!mvuData.stat_data) mvuData.stat_data = {};
-
         // 1. 同步所有基础数据
         mvuData.stat_data.shopConfig = shopConfig;
         mvuData.stat_data.phoneShopDB = phoneShopDB;
@@ -13094,9 +13107,8 @@ async function saveShopDataToMvu() {
 
         // 3. 写入并保存
         mvuData.stat_data.shopMenuAI = menuAI;
-        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: getCurrentMessageId() });
-        console.log("💾 shopMenuAI 同步成功:", Object.keys(menuAI).length, "条记录");
-
+        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: lastMid });
+        console.log(`💾 数据已成功同步至楼层 #${lastMid}`);
     } catch (e) { console.error("同步失败:", e); }
 }// 统一刷新按钮处理器
 function handleInterfaceRefresh(name) {
@@ -13242,7 +13254,7 @@ async function handleMoriCommand(command) {
     
     try {
         await waitGlobalInitialized("Mvu");
-        const mvuData = Mvu.getMvuData({ type: "message", message_id: getCurrentMessageId() });
+        const mvuData = Mvu.getMvuData({ type: "message", message_id: TavernHelper.getLastMessageId() });
         let feedback = "";
 
         // --- 1. 动态解锁指令：UNLOCK_X (如 UNLOCK_20) ---
@@ -13692,27 +13704,6 @@ function confirmBranch(mid, summary) {
         // 自动刷新页面以应用新分支
         setTimeout(() => location.reload(), 1000);
     }
-}
-
-// 深度回溯获取全量 MVU 数据
-async function getFullCumulativeState() {
-    try {
-        const lastMid = TavernHelper.getLastMessageId();
-        // 从最后一条消息开始往回找，最多找20层
-        for (let i = lastMid; i >= 0; i--) {
-            const data = Mvu.getMvuData({ type: 'message', message_id: i });
-            // 如果这一层有 stat_data 且里面有关键数据库（比如论坛）
-            if (data && data.stat_data && Object.keys(data.stat_data).length > 0) {
-                console.log(`🎯 找到最新存档点：楼层 #${i}`);
-                // 返回一份深拷贝，防止直接修改历史引用的对象
-                return JSON.parse(JSON.stringify(data));
-            }
-        }
-    } catch (e) {
-        console.warn("回溯存档失败，使用基础数据", e);
-    }
-    // 如果没有任何楼层有数据，则返回空对象（此时会读取世界书默认值）
-    return { stat_data: {} };
 }
 </script>
   </body>
