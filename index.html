@@ -6041,8 +6041,8 @@ function triggerRegenerateClick() {
         const aiRawResponse = await TavernHelper.generate({ user_input: promptText });
         if (!aiRawResponse) throw new Error("AI 返回内容为空");
 
-        // --- 步骤 4: 提取 <dialogtext> 标签中的剧情 JSON ---
-        const dialogRegex = new RegExp("<dialogtext>\\s*([\\s\\S]*?)\\s*</dialogtext>", "i");
+// --- 步骤 4: 提取 <dialogtext> 标签中的剧情数据 (宽容模式) ---
+  const dialogRegex = new RegExp("<dialogtext>\\s*([\\s\\S]*?)\\s*</dialogtext>", "i");
         const dialogMatch = aiRawResponse.match(dialogRegex);
         
         let newDialogData = [];
@@ -6050,11 +6050,20 @@ function triggerRegenerateClick() {
             let jsonContent = dialogMatch[1].trim().replace(new RegExp("<!--[\\s\\S]*?-->", "g"), ""); // 剔除注释
             const start = jsonContent.indexOf("[");
             const end = jsonContent.lastIndexOf("]");
+            
             if (start !== -1 && end !== -1) {
-                newDialogData = JSON.parse(jsonContent.substring(start, end + 1));
+                const dataStr = jsonContent.substring(start, end + 1);
+                try {
+                    // 【核心改动】：这里不再使用 JSON.parse，改为 new Function
+                    // 它允许反引号 ` 、真实的换行符以及各种不标准的 JS 格式
+                    newDialogData = new Function(`return ${dataStr}`)();
+                    console.log("✅ 剧情数据提取成功（JS 宽容模式）");
+                } catch (e) {
+                    console.error("❌ 即使是宽容模式也解析失败了:", e);
+                    // 这里不报错，后面会自动走兜底逻辑显示原文
+                }
             }
         }
-
         // --- 步骤 5: 解析变量命令 (MVU) ---
         // 在存入数据库前，先通过 Mvu 把数值变动算好
         let updatedStatData = currentData;
@@ -13443,7 +13452,7 @@ function getSelectedLayer() {
                 const jsonStr = content.substring(start, end + 1);
                 
                 // 更新全局剧情变量
-                dialogData = JSON.parse(jsonStr);
+                dialogData = new Function(`return ${jsonStr}`)();
                 dialogIndex = -1; // 重置进度
                 isStoryFinished = false; 
                 console.log("🎬 剧情数据已从楼层提取并更新");
