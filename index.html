@@ -5548,19 +5548,19 @@
         </div>
         <!-- 研发加载动画层 -->
 <!-- 研发加载动画层 -->
-<div id="devLoading" class="dev-loading-overlay">
-  <div class="loader-cup">🥤</div>
-  <div class="loading-text">正在通过食客评审...</div>
-  
-  <!-- 新增：响应计时器 -->
-  <div id="responseTimer" style="margin-top: 10px; color: #ff6b81; font-weight: bold; font-size: 18px;">已响应: 0秒</div>
-  
-  <!-- 新增：流式内容预览框 -->
-  <div id="streamPreview" style="margin-top: 20px; width: 80%; max-height: 150px; background: rgba(0,0,0,0.05); border-radius: 15px; padding: 15px; font-size: 14px; color: #666; overflow-y: auto; border: 1px dashed #ccc; text-align: left; font-family: monospace;">
-      等待评审团发言...
-  </div>
+<!-- 研发加载动画层 -->
+<div id="devLoading" class="dev-loading-overlay" style="position: fixed; overflow: hidden;">
+  <!-- 随机原料图片：初始隐藏，JS 赋值 src -->
+  <img id="loadingIngredient" 
+       src="" 
+       style="position: absolute; width: 120px; height: 120px; cursor: pointer; z-index: 10; object-fit: contain; user-select: none;"
+       onclick="boostIngredient()" />
 
-  <div class="loading-tips-wrap">
+  <div class="loading-text" style="margin-top: 150px; z-index: 5;">正在通过食客评审...</div>
+  
+  <div id="responseTimer" style="margin-top: 10px; color: #ff6b81; font-weight: bold; font-size: 18px; z-index: 5;">已响应: 0秒</div>
+
+  <div class="loading-tips-wrap" style="z-index: 5;">
       <div class="tip-label">小贴士 Tips</div>
       <div id="loadingTipText">你知道吗？珍珠煮太久会失去 Q弹的灵魂。</div>
   </div>
@@ -5932,7 +5932,8 @@ let isSyncing = false; // 全局防抖锁
 let loadingTimerInterval = null; // 计时器
 let responseSeconds = 0; // 累计秒数
 let tipInterval = null;
-
+let bounceInterval = null;
+let bounceData = { x: 50, y: 50, vx: 4, vy: 4, width: 120, height: 120 };
       const TavernHelper = {
     async createChatMessages(msgs, ops) {
         return await window.createChatMessages(msgs, ops);
@@ -13871,6 +13872,88 @@ function startTipRotation() {
             tipText.style.opacity = 1;
         }, 300);
     }, 3000); 
+}
+
+function startLoadingState() {
+    const loader = document.getElementById("devLoading");
+    const ingImg = document.getElementById("loadingIngredient");
+    if (!loader || !ingImg) return;
+
+    loader.style.display = "flex";
+    responseSeconds = 0;
+    document.getElementById("responseTimer").innerText = "已响应: 0秒";
+
+    // 1. 随机挑选一个原料图片
+    const validIngs = ingredientsDB.filter(i => !i.isFixed);
+    const randomIng = validIngs[Math.floor(Math.random() * validIngs.length)];
+    const imgName = randomIng.baseImageName || randomIng.name;
+    ingImg.src = `${imgBaseUrl}${imgName}.PNG`;
+
+    // 2. 初始化弹球位置（屏幕中心附近）
+    bounceData.x = window.innerWidth / 2 - 60;
+    bounceData.y = window.innerHeight / 2 - 60;
+    // 随机初始速度
+    bounceData.vx = (Math.random() > 0.5 ? 1 : -1) * (3 + Math.random() * 3);
+    bounceData.vy = (Math.random() > 0.5 ? 1 : -1) * (3 + Math.random() * 3);
+
+    // 3. 启动 Tips 轮换
+    startTipRotation();
+
+    // 4. 启动秒数计时
+    if (loadingTimerInterval) clearInterval(loadingTimerInterval);
+    loadingTimerInterval = setInterval(() => {
+        responseSeconds++;
+        document.getElementById("responseTimer").innerText = `已响应: ${responseSeconds}秒`;
+    }, 1000);
+
+    // 5. 启动弹球动画 (60帧/秒)
+    if (bounceInterval) clearInterval(bounceInterval);
+    bounceInterval = setInterval(runBounceLogic, 16);
+}
+
+function stopLoadingState() {
+    const loader = document.getElementById("devLoading");
+    if (loader) loader.style.display = "none";
+    
+    clearInterval(loadingTimerInterval);
+    clearInterval(tipInterval);
+    clearInterval(bounceInterval); // 停止弹球
+    isSyncing = false; 
+}
+
+function runBounceLogic() {
+    const ingImg = document.getElementById("loadingIngredient");
+    if (!ingImg) return;
+
+    // 更新坐标
+    bounceData.x += bounceData.vx;
+    bounceData.y += bounceData.vy;
+
+    // 边界检测：左右
+    if (bounceData.x <= 0 || bounceData.x + bounceData.width >= window.innerWidth) {
+        bounceData.vx *= -1; // 反弹
+        bounceData.x = bounceData.x <= 0 ? 0 : window.innerWidth - bounceData.width;
+    }
+
+    // 边界检测：上下
+    if (bounceData.y <= 0 || bounceData.y + bounceData.height >= window.innerHeight) {
+        bounceData.vy *= -1; // 反弹
+        bounceData.y = bounceData.y <= 0 ? 0 : window.innerHeight - bounceData.height;
+    }
+
+    // 应用样式
+    ingImg.style.left = bounceData.x + "px";
+    ingImg.style.top = bounceData.y + "px";
+}
+
+// 点击原料时给它一个随机的动力加速
+function boostIngredient() {
+    bounceData.vx = (Math.random() > 0.5 ? 1 : -1) * (8 + Math.random() * 5);
+    bounceData.vy = (Math.random() > 0.5 ? 1 : -1) * (8 + Math.random() * 5);
+    // 顺便做一个缩放效果
+    const ingImg = document.getElementById("loadingIngredient");
+    ingImg.style.transform = "scale(1.2)";
+    setTimeout(() => ingImg.style.transform = "scale(1)", 100);
 }
 </script>
   </body>
