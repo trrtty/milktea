@@ -5928,7 +5928,11 @@
 <!-- 评论弹窗层 -->
 
     <script>
-      // 定义全局输出函数，确保同时在弹窗和控制台显示
+let isSyncing = false; // 全局防抖锁
+let loadingTimerInterval = null; // 计时器
+let responseSeconds = 0; // 累计秒数
+let tipInterval = null;
+
       const TavernHelper = {
     async createChatMessages(msgs, ops) {
         return await window.createChatMessages(msgs, ops);
@@ -6005,46 +6009,61 @@ function triggerRegenerateClick() {
     }
 }
 async function flushTavernBuffer() {
-    if (tavernMessageBuffer.length === 0) return;
+    // 1. 防抖检查：如果正在同步或没内容，直接返回
+    if (isSyncing || tavernMessageBuffer.length === 0) return;
+    isSyncing = true; 
 
-    let modeTag = "【" + (currentNarrativeMode === 'novel' ? "小说" : "对话") + "模式】";
-    const promptText = modeTag + "【店长决策汇总】：\n\n" + tavernMessageBuffer.join("\n\n");
-
-    const loader = document.getElementById("devLoading");
-    if (loader) {
-        loader.style.display = "flex";
-        document.querySelector("#devLoading .loading-text").innerText = "正在通过逻辑链路传输决策...";
+    // UI 反馈：按钮物理锁定
+    const btnCircle = document.querySelector(".main-sync-circle");
+    if (btnCircle) {
+        btnCircle.style.opacity = "0.5";
+        btnCircle.style.pointerEvents = "none";
     }
 
+    // 2. 启动计时、预览抓取和 Tips 轮换
+    startLoadingState();
+
+    // 锁定逻辑位，防止监听器插手
     isStoryFinished = true; 
     window.isManualFlowActive = true; 
 
     try {
+        // --- 构建提示词 ---
+        let modeTag = "【" + (currentNarrativeMode === 'novel' ? "小说" : "对话") + "模式】";
+        const promptText = modeTag + "【店长决策汇总】：\n\n" + tavernMessageBuffer.join("\n\n");
+
+        // --- 【核心：数据接力】 ---
         const lastMid = TavernHelper.getLastMessageId();
         const lastMvu = Mvu.getMvuData({ type: 'message', message_id: lastMid });
         const lastData = lastMvu ? lastMvu.stat_data : null;
 
+        // 发送用户指令
         await TavernHelper.createChatMessages(
             [{ 
                 role: 'user', 
                 message: promptText,
-                data: lastData ? { stat_data: lastData } : undefined // 👈 关键：继承上一楼的数据
+                data: lastData ? { stat_data: lastData } : undefined 
             }],
             { refresh: 'none' }
         );
 
-
         const currentData = Mvu.getMvuData({ type: 'message', message_id: TavernHelper.getLastMessageId() });
 
+        // --- 【核心：生成回复】 ---
         const aiRawResponse = await TavernHelper.generate({ user_input: promptText });
         if (!aiRawResponse) throw new Error("AI 返回内容为空");
+        
+        // 抓取结束后提示
+        const previewEl = document.getElementById("streamPreview");
+        if (previewEl) previewEl.innerText = "内容获取完毕，正在解析逻辑...";
 
-  const dialogRegex = new RegExp("<dialogtext>\\s*([\\s\\S]*?)\\s*</dialogtext>", "i");
+        // --- 提取剧情数据 ---
+        const dialogRegex = new RegExp("<dialogtext>\\s*([\\s\\S]*?)\\s*</dialogtext>", "i");
         const dialogMatch = aiRawResponse.match(dialogRegex);
         
         let newDialogData = [];
         if (dialogMatch) {
-            let jsonContent = dialogMatch[1].trim().replace(new RegExp("<!--[\\s\\S]*?-->", "g"), ""); // 剔除注释
+            let jsonContent = dialogMatch[1].trim().replace(new RegExp("<!--[\\s\\S]*?-->", "g"), ""); 
             const start = jsonContent.indexOf("[");
             const end = jsonContent.lastIndexOf("]");
             
@@ -6052,18 +6071,21 @@ async function flushTavernBuffer() {
                 const dataStr = jsonContent.substring(start, end + 1);
                 try {
                     newDialogData = new Function(`return ${dataStr}`)();
-                    console.log("✅ 剧情数据提取成功（JS 宽容模式）");
+                    console.log("✅ 剧情数据解析成功");
                 } catch (e) {
-                    console.error("❌ 即使是宽容模式也解析失败了:", e);
+                    console.error("❌ 剧情数据格式异常:", e);
                 }
             }
         }
+
+        // --- 解析变量变动 (MVU) ---
         let updatedStatData = currentData;
         if (typeof Mvu?.parseMessage === 'function') {
             const parsedData = await Mvu.parseMessage(aiRawResponse, currentData || { stat_data: {} });
             if (parsedData) updatedStatData = parsedData;
         }
 
+        // --- 创建 AI 楼层 ---
         const assistantMid = await TavernHelper.createChatMessages(
             [{ role: 'assistant', message: aiRawResponse, data: updatedStatData || void 0 }],
             { refresh: 'none' }
@@ -6071,10 +6093,11 @@ async function flushTavernBuffer() {
 
         window.lastProcessedId = assistantMid;
 
+        // --- 刷新 UI 显示 ---
         if (newDialogData.length > 0) {
             dialogData = newDialogData;
             dialogIndex = -1;
-            isStoryFinished = false;
+            isStoryFinished = false; 
         }
 
         await reloadGameData(assistantMid);
@@ -6082,25 +6105,28 @@ async function flushTavernBuffer() {
         tavernMessageBuffer = [];
         updateSyncButtonUI();
 
-        if (loader) loader.style.display = "none";
-        console.log("✅ 7步同步流完成，开启新剧情。");
+        console.log("✅ 同步流完成。");
+        
         if (appSettings.pendingScenes && appSettings.pendingScenes.length > 0) {
-            console.log("🎬 检测到待处理场景，正在跳转...");
             await processSceneQueue(); 
         } else {
             nextDialog(); 
         }
 
     } catch (e) {
-        console.error("❌ 静默同步流执行失败:", e);
-        if (loader) loader.style.display = "none";
+        console.error("❌ 同步失败:", e);
         isStoryFinished = false;
-        showSysAlert("逻辑链路发生故障，请检查控制台或重新同步。");
+        showSysAlert("传输失败，请检查连接。");
     } finally {
+        // 4. 彻底收尾：关闭 Loading，恢复按钮
+        stopLoadingState();
+        if (btnCircle) {
+            btnCircle.style.opacity = "1";
+            btnCircle.style.pointerEvents = "auto";
+        }
         window.isManualFlowActive = false;
     }
 }
-
 let playerName = "店长"; // 默认兜底名称 
 let shopConfig = {};
 let appSettings = { drinkBackground: null, activeScene: null, pendingScenes: [] };
@@ -9810,7 +9836,6 @@ function handleSort(criterion, btn) {
         "口感平衡分取决于‘清爽系’与‘醇厚系’原料的配比。",
       ];
 
-      let tipInterval = null;
 
 /* --- 修复版：研发完成进入精修的逻辑 (适配极简配方码) --- */
 async function finishDev() {
@@ -13791,58 +13816,61 @@ function confirmBranch(mid, summary) {
     }
 }
 
-let isSyncing = false; // 全局防抖锁
-let loadingTimerInterval = null; // 计时器
-let responseSeconds = 0; // 累计秒数
-
-// 开启 Loading 动画与计时
+// 修改：开启 Loading 动画与计时
 function startLoadingState() {
     const loader = document.getElementById("devLoading");
     if (!loader) return;
 
     loader.style.display = "flex";
     responseSeconds = 0;
-    document.getElementById("responseTimer").innerText = "已响应: 0秒";
-    document.getElementById("streamPreview").innerText = "等待首字下发...";
+    
+    const timerEl = document.getElementById("responseTimer");
+    const previewEl = document.getElementById("streamPreview");
+    
+    if (timerEl) timerEl.innerText = "已响应: 0秒";
+    if (previewEl) previewEl.innerText = "等待评审团发言...";
 
-    // 1. 启动 Tips 轮换 (修复你之前定义了但没调用的问题)
+    // 1. 启动 Tips 轮换
     startTipRotation();
 
-    // 2. 启动秒数计时
+    // 2. 启动秒数计时与流式轮询
     if (loadingTimerInterval) clearInterval(loadingTimerInterval);
     loadingTimerInterval = setInterval(() => {
         responseSeconds++;
-        document.getElementById("responseTimer").innerText = `已响应: ${responseSeconds}秒`;
+        if (timerEl) timerEl.innerText = `已响应: ${responseSeconds}秒`;
         
-        // 3. 顺便每秒轮询一次最后一楼的内容，实现流式预览
+        // 3. 流式抓取
         updateStreamPreview();
     }, 1000);
 }
 
-// 停止 Loading
+// 修改：停止 Loading 并清理
 function stopLoadingState() {
     const loader = document.getElementById("devLoading");
     if (loader) loader.style.display = "none";
     
     if (loadingTimerInterval) clearInterval(loadingTimerInterval);
     if (tipInterval) clearInterval(tipInterval);
-    isSyncing = false; // 解锁
+    isSyncing = false; // 解锁防抖
 }
 
-// 实时抓取流式文本
-function updateStreamPreview() {
-    try {
-        const lastMid = TavernHelper.getLastMessageId();
-        const msgs = TavernHelper.getChatMessages(lastMid);
-        if (msgs && msgs.length > 0 && msgs[0].role === 'assistant') {
-            let text = msgs[0].message || "";
-            // 过滤掉所有 HTML 标签，只显示纯文字预览
-            const cleanText = text.replace(/<[^>]*>?/gm, '').substring(0, 200);
-            document.getElementById("streamPreview").innerText = cleanText + (text.length > 200 ? "..." : "");
-        }
-    } catch (e) {
-        console.error("预览抓取失败", e);
-    }
+// 修改：Tips 轮换逻辑（增加初始显示）
+function startTipRotation() {
+    const tipText = document.getElementById("loadingTipText");
+    if (!tipText) return;
+
+    let idx = Math.floor(Math.random() * DEV_TIPS.length);
+    tipText.innerText = DEV_TIPS[idx]; // 立即显示第一句
+    
+    if (tipInterval) clearInterval(tipInterval);
+    tipInterval = setInterval(() => {
+        tipText.style.opacity = 0;
+        setTimeout(() => {
+            idx = (idx + 1) % DEV_TIPS.length;
+            tipText.innerText = DEV_TIPS[idx];
+            tipText.style.opacity = 1;
+        }, 300);
+    }, 3000); 
 }
 </script>
   </body>
