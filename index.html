@@ -5546,23 +5546,21 @@
             </div>
           </div>
         </div>
-        <!-- 研发加载动画层 -->
 <!-- 研发加载动画层 -->
-<!-- 研发加载动画层 -->
-<div id="devLoading" class="dev-loading-overlay" style="position: fixed; overflow: hidden;">
-  <!-- 随机原料图片：初始隐藏，JS 赋值 src -->
+<div id="devLoading" class="dev-loading-overlay" style="position: fixed; overflow: hidden; touch-action: none;">
+  <!-- 随机原料弹球：尺寸翻倍为 240px -->
   <img id="loadingIngredient" 
        src="" 
-       style="position: absolute; width: 120px; height: 120px; cursor: pointer; z-index: 10; object-fit: contain; user-select: none;"
+       style="position: absolute; width: 240px; height: 240px; cursor: pointer; z-index: 10; object-fit: contain; user-select: none; pointer-events: auto;"
        onclick="boostIngredient()" />
 
-  <div class="loading-text" style="margin-top: 150px; z-index: 5;">正在通过食客评审...</div>
+  <div class="loading-text" style="margin-top: 300px; z-index: 5; position: relative;">正在通过食客评审...</div>
   
-  <div id="responseTimer" style="margin-top: 10px; color: #ff6b81; font-weight: bold; font-size: 18px; z-index: 5;">已响应: 0秒</div>
+  <div id="responseTimer" style="margin-top: 10px; color: #ff6b81; font-weight: bold; font-size: 18px; z-index: 5; position: relative;">已响应: 0秒</div>
 
-  <div class="loading-tips-wrap" style="z-index: 5;">
+  <div class="loading-tips-wrap" style="z-index: 5; position: relative;">
       <div class="tip-label">小贴士 Tips</div>
-      <div id="loadingTipText">你知道吗？珍珠煮太久会失去 Q弹的灵魂。</div>
+      <div id="loadingTipText">正在加载小贴士...</div>
   </div>
 </div>
         <!-- 4. 改良后的成品精修界面 (layer-result) - 纯净版 -->
@@ -5933,7 +5931,12 @@ let loadingTimerInterval = null; // 计时器
 let responseSeconds = 0; // 累计秒数
 let tipInterval = null;
 let bounceInterval = null;
-let bounceData = { x: 50, y: 50, vx: 4, vy: 4, width: 120, height: 120 };
+let bounceData = { 
+    x: 0, y: 0, 
+    vx: 0, vy: 0, 
+    w: 240, h: 240, 
+    friction: 0.985 // 速度衰减系数，越小停得越快
+};
       const TavernHelper = {
     async createChatMessages(msgs, ops) {
         return await window.createChatMessages(msgs, ops);
@@ -6054,9 +6057,6 @@ async function flushTavernBuffer() {
         const aiRawResponse = await TavernHelper.generate({ user_input: promptText });
         if (!aiRawResponse) throw new Error("AI 返回内容为空");
         
-        // 抓取结束后提示
-        const previewEl = document.getElementById("streamPreview");
-        if (previewEl) previewEl.innerText = "内容获取完毕，正在解析逻辑...";
 
         // --- 提取剧情数据 ---
         const dialogRegex = new RegExp("<dialogtext>\\s*([\\s\\S]*?)\\s*</dialogtext>", "i");
@@ -6128,6 +6128,8 @@ async function flushTavernBuffer() {
         window.isManualFlowActive = false;
     }
 }
+
+
 let playerName = "店长"; // 默认兜底名称 
 let shopConfig = {};
 let appSettings = { drinkBackground: null, activeScene: null, pendingScenes: [] };
@@ -13849,75 +13851,102 @@ function startLoadingState() {
     // 1. 随机挑选一个原料图片
     const validIngs = ingredientsDB.filter(i => !i.isFixed);
     const randomIng = validIngs[Math.floor(Math.random() * validIngs.length)];
-    const imgName = randomIng.baseImageName || randomIng.name;
-    ingImg.src = `${imgBaseUrl}${imgName}.PNG`;
+    ingImg.src = `${imgBaseUrl}${randomIng.baseImageName || randomIng.name}.PNG`;
 
-    // 2. 初始化弹球位置（屏幕中心附近）
-    bounceData.x = window.innerWidth / 2 - 60;
-    bounceData.y = window.innerHeight / 2 - 60;
-    // 随机初始速度
-    bounceData.vx = (Math.random() > 0.5 ? 1 : -1) * (3 + Math.random() * 3);
-    bounceData.vy = (Math.random() > 0.5 ? 1 : -1) * (3 + Math.random() * 3);
+    // 2. 初始化位置：屏幕正中心（原 emoji 位置）
+    bounceData.x = window.innerWidth / 2 - bounceData.w / 2;
+    bounceData.y = window.innerHeight / 2 - bounceData.h / 2;
+    
+    // 3. 初始速度设为 0（不动）
+    bounceData.vx = 0;
+    bounceData.vy = 0;
 
-    // 3. 启动 Tips 轮换
+    // 应用初始位置样式
+    ingImg.style.left = bounceData.x + "px";
+    ingImg.style.top = bounceData.y + "px";
+    ingImg.style.transform = "scale(1)";
+
+    // 4. 启动 Tips 轮换和计时
     startTipRotation();
-
-    // 4. 启动秒数计时
     if (loadingTimerInterval) clearInterval(loadingTimerInterval);
     loadingTimerInterval = setInterval(() => {
         responseSeconds++;
         document.getElementById("responseTimer").innerText = `已响应: ${responseSeconds}秒`;
     }, 1000);
 
-    // 5. 启动弹球动画 (60帧/秒)
+    // 5. 启动物理循环 (60FPS)
     if (bounceInterval) clearInterval(bounceInterval);
     bounceInterval = setInterval(runBounceLogic, 16);
 }
 
-function stopLoadingState() {
-    const loader = document.getElementById("devLoading");
-    if (loader) loader.style.display = "none";
-    
-    clearInterval(loadingTimerInterval);
-    clearInterval(tipInterval);
-    clearInterval(bounceInterval); // 停止弹球
-    isSyncing = false; 
-}
-
+// 物理碰撞与衰减逻辑
 function runBounceLogic() {
     const ingImg = document.getElementById("loadingIngredient");
     if (!ingImg) return;
 
-    // 更新坐标
+    // 如果速度极小，则停止计算以节省性能
+    if (Math.abs(bounceData.vx) < 0.1 && Math.abs(bounceData.vy) < 0.1) {
+        bounceData.vx = 0;
+        bounceData.vy = 0;
+        return; 
+    }
+
+    // 更新位置
     bounceData.x += bounceData.vx;
     bounceData.y += bounceData.vy;
 
-    // 边界检测：左右
-    if (bounceData.x <= 0 || bounceData.x + bounceData.width >= window.innerWidth) {
-        bounceData.vx *= -1; // 反弹
-        bounceData.x = bounceData.x <= 0 ? 0 : window.innerWidth - bounceData.width;
+    // 速度衰减（模拟摩擦力）
+    bounceData.vx *= bounceData.friction;
+    bounceData.vy *= bounceData.friction;
+
+    // 边界反弹：左右
+    if (bounceData.x <= 0 || bounceData.x + bounceData.w >= window.innerWidth) {
+        bounceData.vx *= -1; // 撞墙反弹
+        bounceData.x = bounceData.x <= 0 ? 0 : window.innerWidth - bounceData.w;
+    }
+    // 边界反弹：上下
+    if (bounceData.y <= 0 || bounceData.y + bounceData.h >= window.innerHeight) {
+        bounceData.vy *= -1; // 撞墙反弹
+        bounceData.y = bounceData.y <= 0 ? 0 : window.innerHeight - bounceData.h;
     }
 
-    // 边界检测：上下
-    if (bounceData.y <= 0 || bounceData.y + bounceData.height >= window.innerHeight) {
-        bounceData.vy *= -1; // 反弹
-        bounceData.y = bounceData.y <= 0 ? 0 : window.innerHeight - bounceData.height;
-    }
-
-    // 应用样式
+    // 渲染位置
     ingImg.style.left = bounceData.x + "px";
     ingImg.style.top = bounceData.y + "px";
+    
+    // 根据速度稍微增加一点旋转感
+    ingImg.style.transform = `rotate(${bounceData.x * 0.1}deg)`;
 }
 
-// 点击原料时给它一个随机的动力加速
+// 点击互动：赋予随机的弹跳动力
 function boostIngredient() {
-    bounceData.vx = (Math.random() > 0.5 ? 1 : -1) * (8 + Math.random() * 5);
-    bounceData.vy = (Math.random() > 0.5 ? 1 : -1) * (8 + Math.random() * 5);
-    // 顺便做一个缩放效果
+    // 每次点击给一个 15-25 之间的随机速度
+    const speed = 20 + Math.random() * 10;
+    const angle = Math.random() * Math.PI * 2; // 随机 360 度方向
+    
+    bounceData.vx = Math.cos(angle) * speed;
+    bounceData.vy = Math.sin(angle) * speed;
+    
+    // 视觉反馈：点中时瞬间放大缩小
     const ingImg = document.getElementById("loadingIngredient");
+    ingImg.style.transition = "transform 0.1s";
     ingImg.style.transform = "scale(1.2)";
-    setTimeout(() => ingImg.style.transform = "scale(1)", 100);
+    setTimeout(() => { 
+        ingImg.style.transition = "none";
+        ingImg.style.transform = "scale(1)"; 
+    }, 100);
 }
+
+// 停止加载
+function stopLoadingState() {
+    const loader = document.getElementById("devLoading");
+    if (loader) loader.style.display = "none";
+    clearInterval(loadingTimerInterval);
+    clearInterval(tipInterval);
+    clearInterval(bounceInterval);
+    isSyncing = false; 
+}
+
 </script>
   </body>
 </html>
