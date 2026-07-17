@@ -2509,7 +2509,6 @@
 
       .loading-tips-wrap {
         margin-top: 50px;
-        width: 80%;
         text-align: center;
         padding: 20px;
         border-top: 2px solid #ebebe3;
@@ -5546,11 +5545,11 @@
             </div>
           </div>
         </div>
-        <div id="devLoading" class="dev-loading-overlay" style="position: fixed; inset: 0; overflow: hidden; touch-action: none; background: rgba(253, 251, 247, 0.95); z-index: 9999;">
+        <div id="devLoading" class="dev-loading-overlay" style="position: fixed; inset: 0; overflow: hidden; touch-action: none; background: rgba(253, 251, 247, 1); z-index: 9999;">
           <!-- 随机原料：z-index 设为 1，确保在最底层 -->
           <img id="loadingIngredient" 
                src="" 
-               style="position: absolute; width: 720px; height: 720px; cursor: pointer; z-index: 1; object-fit: contain; user-select: none; transition: transform 0.1s;"
+               style="position: absolute; width: 360px; height: 360px; cursor: pointer; z-index: 1; object-fit: contain; user-select: none; transition: transform 0.1s;"
                onclick="boostIngredient()" />
       
           <!-- 文本内容：z-index 设为 5，浮在球上面 -->
@@ -10662,7 +10661,12 @@ function renderSimTaskList() {
         const photoUrl = `${customerBaseUrl}${task.id}.JPG`; // 头像依然用内部 id 匹配
         const card = document.createElement("div");
         card.className = "task-card";
+        const constraintsHTML = task.constraints.map(c => 
+            `<div class="task-req-item">${c.replace(/\|/g, '<br>')}</div>`
+        ).join("");
 
+        // 处理 reward 字符串，支持 | 换行
+        const rewardHTML = task.reward.replace(/\|/g, '<br>');
         card.innerHTML = `
             <div class="task-header">
                 <img src="${photoUrl}" class="task-photo" onerror="this.src='https://files.catbox.moe/gonxin.JPG'">
@@ -10677,7 +10681,7 @@ function renderSimTaskList() {
             </div>
             <div class="task-footer">
                 <div class="task-reward">${task.reward}</div>
-                <!-- 【关键点】：这里传递 dbKey (江砚洲) 而不是 task.id -->
+        
                 <button class="btn-submit-task" onclick="goSubmitTask('${dbKey}')">提交奶茶</button>
             </div>
         `;
@@ -10854,11 +10858,6 @@ function renderSimMatchList() {
 
         container.innerHTML = ""; // 清空容器
 
-        /**
-         * 修改点：使用 Object.entries(phoneMatchDB)
-         * 这会将对象转换为一个数组，例如：[["第一届·夏日清爽杯", {数据...}], ["比赛2", {数据...}]]
-         * [title, match] 是解构赋值：title 拿到键名，match 拿到里面的数据对象
-         */
         Object.entries(phoneMatchDB).forEach(([title, match]) => {
           const card = document.createElement("div");
           card.className = "match-card";
@@ -10876,9 +10875,11 @@ function renderSimMatchList() {
             `;
             })
             .join("");
+            const reqHTML = match.requirement.split('|').map(text => `<div>${text.trim()}</div>`).join("");
+        const rewardHTML = match.reward.replace(/\|/g, '<br>');
 
           card.innerHTML = `
-            <!-- 注意：这里直接使用变量 title，它现在带有下划线样式 -->
+   
             <h3 class="match-title">${title}</h3>
             
             <p style="font-size:22px; color:#888; margin-top:8px; font-style:italic; line-height:1.4;">“${match.desc}”</p>
@@ -10938,27 +10939,28 @@ function renderSimMatchList() {
 
     const currentShopName = shopConfig.identity.name;
 
-    // 1. 过滤并获取前 9 名竞争对手（不含玩家）
+    // 1. 过滤出竞争对手（不含玩家店铺）
     const competitors = Object.entries(phoneShopDB)
-        .filter(([name, data]) => data.owner !== playerName)
+        .filter(([name, data]) => data.owner !== playerName && data.owner !== "{{user}}")
         .map(([name, data]) => ({ name, ...data }))
         .sort((a, b) => b.rating - a.rating)
-        .slice(0, 9);
+        .slice(0, 9); // 取前9名竞争对手
 
-    // 2. 渲染竞争对手列表 (Rank 1-9)
-    competitors.forEach((shop, index) => {
-        const cardHtml = getRankingCardHtml(shop, index + 1, false);
+    // 2. 渲染竞争对手列表
+    competitors.forEach((shop) => {
+        // 【关键修复】：这里不再使用 index + 1，而是调用计算函数
+        const calculatedRank = calculateCityRank(shop.rating, shop.name);
+        const cardHtml = getRankingCardHtml(shop, calculatedRank, false);
         listContainer.insertAdjacentHTML("beforeend", cardHtml);
     });
 
-    // 3. 计算玩家的动态排名
+    // 3. 计算并渲染玩家店铺
     const myShopKey = Object.keys(phoneShopDB).find(key => 
-    phoneShopDB[key].owner === playerName || phoneShopDB[key].owner === "{{user}}"
-);
-    const myShopData = phoneShopDB[myShopKey];
+        phoneShopDB[key].owner === playerName || phoneShopDB[key].owner === "{{user}}"
+    );
+    const myShopData = phoneShopDB[myShopKey] || { rating: 0 };
     const myRank = calculateCityRank(myShopData.rating, currentShopName);
 
-    // 4. 渲染玩家的悬浮底条 (显示真实的 85名 之类的数字)
     myStickyContainer.style.display = "block";
     const myShopObj = { name: currentShopName, ...myShopData };
     myStickyContainer.innerHTML = `
@@ -10967,7 +10969,6 @@ function renderSimMatchList() {
         </div>
     `;
 }
-
 // 抽离出的卡片生成辅助函数
 function getRankingCardHtml(shop, rank, isPlayer) {
     const avatarStr = shop.name.substring(0, 2);
