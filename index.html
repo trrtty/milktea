@@ -5546,23 +5546,23 @@
             </div>
           </div>
         </div>
-<!-- 研发加载动画层 -->
-<div id="devLoading" class="dev-loading-overlay" style="position: fixed; overflow: hidden; touch-action: none;">
-  <!-- 随机原料弹球：尺寸翻倍为 240px -->
-  <img id="loadingIngredient" 
-       src="" 
-       style="position: absolute; width: 240px; height: 240px; cursor: pointer; z-index: 10; object-fit: contain; user-select: none; pointer-events: auto;"
-       onclick="boostIngredient()" />
-
-  <div class="loading-text" style="margin-top: 300px; z-index: 5; position: relative;">正在通过食客评审...</div>
-  
-  <div id="responseTimer" style="margin-top: 10px; color: #ff6b81; font-weight: bold; font-size: 18px; z-index: 5; position: relative;">已响应: 0秒</div>
-
-  <div class="loading-tips-wrap" style="z-index: 5; position: relative;">
-      <div class="tip-label">小贴士 Tips</div>
-      <div id="loadingTipText">正在加载小贴士...</div>
-  </div>
-</div>
+        <div id="devLoading" class="dev-loading-overlay" style="position: fixed; inset: 0; overflow: hidden; touch-action: none; background: rgba(253, 251, 247, 0.95); z-index: 9999;">
+          <!-- 随机原料：z-index 设为 1，确保在最底层 -->
+          <img id="loadingIngredient" 
+               src="" 
+               style="position: absolute; width: 720px; height: 720px; cursor: pointer; z-index: 1; object-fit: contain; user-select: none; transition: transform 0.1s;"
+               onclick="boostIngredient()" />
+      
+          <!-- 文本内容：z-index 设为 5，浮在球上面 -->
+          <div style="position: relative; z-index: 5; text-align: center; pointer-events: none;">
+              <div class="loading-text" style="margin-top: 300px; font-size: 28px; color: #8b4513; font-weight: 900;">正在通过食客评审...</div>
+              <div id="responseTimer" style="margin-top: 15px; color: #ff6b81; font-weight: bold; font-size: 22px;">已响应: 0秒</div>
+              <div class="loading-tips-wrap" style="margin-top: 50px;">
+                  <div class="tip-label">小贴士 Tips</div>
+                  <div id="loadingTipText" style="pointer-events: auto;">正在加载小贴士...</div>
+              </div>
+          </div>
+      </div>
         <!-- 4. 改良后的成品精修界面 (layer-result) - 纯净版 -->
         <div
           id="layer-result"
@@ -9831,13 +9831,69 @@ function handleSort(criterion, btn) {
 }
       /* --- 研发贴士库 --- */
       const DEV_TIPS = [
-        "你知道吗？客人好感度每达到一个星就会送你小礼物哦",
-        "尝试在厚重的奶茶中加入薄荷，会有意想不到的清凉感。",
-        "高颜值的挂壁纹路，能让奶茶的知名度大幅提升。",
-        "草莓果肉的酸甜，是平衡抹茶微苦属性的秘密武器。",
-        "品质评分取决于原料的丰富程度与等级。",
-        "口感平衡分取决于‘清爽系’与‘醇厚系’原料的配比。",
-      ];
+    // 研发技巧
+    "品质评分取决于原料的丰富程度与等级，高成本通常意味着高品质。",
+    "口感平衡分取决于清爽系与醇厚系原料的配比，1:1 是最完美的比例。",
+    "抹茶的微苦可以中和过度的甜腻，是调整口感分的万能利器。",
+    "夏天是清爽系原料的天下，冬天则是醇厚系原料的旺季。",
+    "有些原料在特定季节会有属性加成，夏天多用薄荷和冰块准没错。",
+    "如果研发时开启了 AI 协助命名，评审团会根据你的配方风格给出超酷的名字。",
+    "精修界面里调整图层顺序非常重要，别让奶盖挡住了抹茶粉。",
+
+    // 社交互动
+    "客人好感度每达到一个星，就会送你稀有的专属原料或装饰哦。",
+    "大众点评和奶茶超话里除了店长身份，还可以用匿名马甲引导舆论。",
+    "点击顾客档案里的发送私信，可以在店里没客人的时候主动邀约。",
+    "如果顾客还没到访过，可以去奶茶委托里看看有没有对方发出的求助。",
+    "最爱成品是提升好感度最快的方式，根据顾客的偏好标签去试错吧。",
+    "潜在顾客通常会先通过奶茶委托联系你，完成任务是解锁新人的关键。",
+    "每个顾客都有讨厌的原料，如果不小心加进去，好感度会大幅下降。",
+    "好感度达到 1 星时，记得查看手机，说不定对方正想约你见面。",
+
+    // 店铺经营
+ 
+    "每日零点系统会自动扣除租金，账户余额不足可能会导致信誉受损。",
+    "区域排名是动态变化的，如果你的评分停滞不前，很快就会被竞争对手超越。",
+    "在店长终端可以随时查看增益商店购买的 Buff 剩余天数。",
+    "租金是每天定时扣除的，保持账户里有足够的备用金是店长的基本素养。",
+
+    // 环境影响
+    "雨天和阴天时，客人们更倾向于点一杯热腾腾的浓郁奶茶。",
+    "春天和秋天是特调的爆发期，尝试加入一些花草类原料吧。",
+    "左上角的时间和天气实时决定了今天哪些原料是当季之星。",
+    "深夜到访的客人往往心情比较复杂，尝试给他们准备一杯治愈系的特调。",
+    "下雪天时，热腾腾的红豆奶茶销售额通常是平时的两倍。",
+
+    // 系统与趣味
+    "等待评审时太无聊？点击屏幕上那个乱跳的原料，可以给它一个动力加速度！",
+    "Loading 界面出现的原料图是随机从你的库存里抽取的，每次都有惊喜。",
+    "如果觉得评审太难，可以在系统设置里切换轻松模式，评审团会变得很宽容。",
+    "配方库里的极简码可以分享给其他店长，方便他们复刻你的神仙配方。",
+    "记得给你的招牌奶茶写一段动人的简介，这能增加随机触发的好评概率。",
+    "参加比赛不一定要赢，每次参与都能获得宝贵的评审反馈。",
+
+    "在精修工坊里，适当降低原料的不透明度，可以营造出果冻或冰块半透明的质感。",
+    "对比度和亮度滑块是店长的魔法，它们能让普通的茶叶素材看起来像是在发光。",
+    "上移和下移图层功能非常关键，利用遮挡关系可以做出水果沉入杯底的视觉效果。",
+    "极简码虽然长度很短，但它能精准记录每一层原料的染色信息，方便快速复刻。",
+    "如果想做渐变层奶茶，可以尝试给连续的三个茶底涂上色相接近的颜色。",
+    "研发时加入薄荷叶作为装饰，虽然成本只增加1元，但清爽度数值会大幅提升。",
+    "配方库里的旧配方如果不想要了，点击删除可以永久移除，腾出展示空间。",
+
+ 
+    // --- 社交与隐藏互动 ---
+    "听说连续点击店长管理终端的等级勋章，会有意想不到的神奇事情发生。",
+    "仔细阅读奶茶委托里的背景故事，文字里往往隐藏着顾客对特定原料的暗示。",
+    "点击超话论坛的自动清理齿轮，系统会自动帮你过滤掉陈旧的灌水贴。",
+
+    // --- 环境与系统彩蛋 ---
+    "系统设置里的全局背景会应用到所有奶茶预览中，蝴蝶结背景是目前最高人气的选择。",
+    "评审进度条跳动得越慢，说明评审团正在思考更复杂的剧情逻辑，点点弹球解个闷吧。",
+    "雷雨天虽然客流量会减少，但此时来店的客人都愿意支付更高的小费。",
+    "在深夜时段，如果你的店名带有治愈、温暖等词汇，知名度的增长速度会翻倍。",
+    "如果你在现实中感到疲惫，可以在设置里开启轻松模式，享受慢节奏的奶茶生活。",
+    "原料弹球的速度是会随碰撞衰减的，但只要不停点击，它就能永远保持动力。",
+];
 
 
 /* --- 修复版：研发完成进入精修的逻辑 (适配极简配方码) --- */
@@ -10941,9 +10997,7 @@ function getRankingCardHtml(shop, rank, isPlayer) {
     
       /* --- 修复版：极度宽松的大众点评详情页渲染 --- */
       function openReviewDetail(shopName) {
-        let currentCommentShop = ""; // 当前评价的店铺
-let currentReplyTarget = null; // 如果是回复，记录原评论对象
-let isCommentOwner = true; // 是否以店长身份评论
+        currentCommentShop = shopName; 
         const shop = phoneShopDB[shopName];
         const container = document.getElementById("sim-review-detail-content");
 
@@ -12286,6 +12340,7 @@ let currentCommentShop = "";
 let currentReplyTarget = null; // 为空表示写新评价，不为空表示回复某人
 let currentCommentStars = 5; 
 let isCommentOwner = true;
+let currentCommentContext = 'shop'; // 默认为店铺评价上下文
 
 // 1. 设置星级逻辑
 function setCommentStars(n) {
@@ -12332,7 +12387,7 @@ let cheatClickCount = 0; // 记录点击次数
 let cheatTimer = null;   // 用于超时重置点击数
 
 
-let currentCommentContext = 'shop'; // 'shop' 或 'forum'
+
 let currentForumPostId = null;     // 记录当前是哪个帖子
 
 
@@ -13098,6 +13153,25 @@ async function saveShopDataToMvu() {
         // 获取最后一楼的现有数据
         const mvuData = Mvu.getMvuData({ type: "message", message_id: lastMid });
         if (!mvuData.stat_data) mvuData.stat_data = {};
+  
+  
+          // --- [新增逻辑：计算店铺排名字符串] ---
+          const allShops = Object.entries(phoneShopDB)
+            .map(([name, data]) => ({
+                name: name,
+                rating: data.rating || 0,
+                isPlayer: (data.owner === playerName || data.owner === "{{user}}")
+            }))
+            .sort((a, b) => b.rating - a.rating);
+
+        let rankingRows = [];
+        allShops.forEach((shop) => {
+            const displayRank = calculateCityRank(shop.rating, shop.name);
+            const tag = shop.isPlayer ? "[本店]" : "";
+            rankingRows.push(`第${displayRank}名:${shop.name}${tag}(评分:${shop.rating.toFixed(1)})`);
+        });
+        // 将结果存入变量
+        mvuData.stat_data.shopRankingListStr = rankingRows.join('；');
         // 1. 同步所有基础数据
         mvuData.stat_data.shopConfig = shopConfig;
         mvuData.stat_data.phoneShopDB = phoneShopDB;
@@ -13112,7 +13186,7 @@ async function saveShopDataToMvu() {
         mvuData.stat_data.matchResultsDB = matchResultsDB; 
         mvuData.stat_data.phoneMatchDB = phoneMatchDB;
         mvuData.stat_data.phoneTaskDB = phoneTaskDB;
-
+ 
         // 2. 制作一个副本给 AI，删掉不需要的字段
         const menuAI = JSON.parse(JSON.stringify(shopMenu)); 
         for (let key in menuAI) {
@@ -13127,6 +13201,8 @@ async function saveShopDataToMvu() {
         console.log(`💾 数据已成功同步至楼层 #${lastMid}`);
     } catch (e) { console.error("同步失败:", e); }
 }// 统一刷新按钮处理器
+
+
 function handleInterfaceRefresh(name) {
     const msg = `(行动): 刷新${name}`;
     queueTavernMessage(msg);
@@ -13825,9 +13901,8 @@ function startTipRotation() {
     const tipText = document.getElementById("loadingTipText");
     if (!tipText) return;
 
-    let idx = Math.floor(Math.random() * DEV_TIPS.length);
-    tipText.innerText = DEV_TIPS[idx]; // 立即显示第一句
-    
+    let idx = Math.floor(Math.random() * DEV_TIPS.length); // 随机开始
+    tipText.innerText = DEV_TIPS[idx];
     if (tipInterval) clearInterval(tipInterval);
     tipInterval = setInterval(() => {
         tipText.style.opacity = 0;
@@ -13946,6 +14021,7 @@ function stopLoadingState() {
     clearInterval(bounceInterval);
     isSyncing = false; 
 }
+
 
 </script>
   </body>
