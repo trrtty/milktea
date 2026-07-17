@@ -13817,43 +13817,6 @@ function confirmBranch(mid, summary) {
     }
 }
 
-// 修改：开启 Loading 动画与计时
-function startLoadingState() {
-    const loader = document.getElementById("devLoading");
-    if (!loader) return;
-
-    loader.style.display = "flex";
-    responseSeconds = 0;
-    
-    const timerEl = document.getElementById("responseTimer");
-    const previewEl = document.getElementById("streamPreview");
-    
-    if (timerEl) timerEl.innerText = "已响应: 0秒";
-    if (previewEl) previewEl.innerText = "等待评审团发言...";
-
-    // 1. 启动 Tips 轮换
-    startTipRotation();
-
-    // 2. 启动秒数计时与流式轮询
-    if (loadingTimerInterval) clearInterval(loadingTimerInterval);
-    loadingTimerInterval = setInterval(() => {
-        responseSeconds++;
-        if (timerEl) timerEl.innerText = `已响应: ${responseSeconds}秒`;
-        
-        // 3. 流式抓取
-        updateStreamPreview();
-    }, 1000);
-}
-
-// 修改：停止 Loading 并清理
-function stopLoadingState() {
-    const loader = document.getElementById("devLoading");
-    if (loader) loader.style.display = "none";
-    
-    if (loadingTimerInterval) clearInterval(loadingTimerInterval);
-    if (tipInterval) clearInterval(tipInterval);
-    isSyncing = false; // 解锁防抖
-}
 
 // 修改：Tips 轮换逻辑（增加初始显示）
 function startTipRotation() {
