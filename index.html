@@ -5547,17 +5547,24 @@
           </div>
         </div>
         <!-- 研发加载动画层 -->
-        <div id="devLoading" class="dev-loading-overlay">
-          <div class="loader-cup">🥤</div>
-          <div class="loading-text">正在通过食客评审...</div>
+<!-- 研发加载动画层 -->
+<div id="devLoading" class="dev-loading-overlay">
+  <div class="loader-cup">🥤</div>
+  <div class="loading-text">正在通过食客评审...</div>
+  
+  <!-- 新增：响应计时器 -->
+  <div id="responseTimer" style="margin-top: 10px; color: #ff6b81; font-weight: bold; font-size: 18px;">已响应: 0秒</div>
+  
+  <!-- 新增：流式内容预览框 -->
+  <div id="streamPreview" style="margin-top: 20px; width: 80%; max-height: 150px; background: rgba(0,0,0,0.05); border-radius: 15px; padding: 15px; font-size: 14px; color: #666; overflow-y: auto; border: 1px dashed #ccc; text-align: left; font-family: monospace;">
+      等待评审团发言...
+  </div>
 
-          <div class="loading-tips-wrap">
-            <div class="tip-label">小贴士 Tips</div>
-            <div id="loadingTipText">
-              你知道吗？珍珠煮太久会失去 Q 弹的灵魂。
-            </div>
-          </div>
-        </div>
+  <div class="loading-tips-wrap">
+      <div class="tip-label">小贴士 Tips</div>
+      <div id="loadingTipText">你知道吗？珍珠煮太久会失去 Q弹的灵魂。</div>
+  </div>
+</div>
         <!-- 4. 改良后的成品精修界面 (layer-result) - 纯净版 -->
         <div
           id="layer-result"
@@ -5999,7 +6006,18 @@ function triggerRegenerateClick() {
 }
  async function flushTavernBuffer() {
     // 如果缓冲区没内容，直接返回
-    if (tavernMessageBuffer.length === 0) return;
+    if (isSyncing || tavernMessageBuffer.length === 0) return;
+    isSyncing = true; // 立即加锁
+
+    // UI 反馈：让按钮变灰不可点
+    const btnCircle = document.querySelector(".main-sync-circle");
+    if (btnCircle) {
+        btnCircle.style.opacity = "0.5";
+        btnCircle.style.pointerEvents = "none";
+    }
+
+    // --- 2. 启动计时和动画 ---
+    startLoadingState();
 
     // --- 步骤 1: 构建提示词 ---
     let modeTag = "【" + (currentNarrativeMode === 'novel' ? "小说" : "对话") + "模式】";
@@ -6040,7 +6058,7 @@ function triggerRegenerateClick() {
         // 这一步会异步等待 AI 回复完成，返回原始字符串
         const aiRawResponse = await TavernHelper.generate({ user_input: promptText });
         if (!aiRawResponse) throw new Error("AI 返回内容为空");
-
+        document.getElementById("streamPreview").innerText = "内容获取完毕，正在解析逻辑...";
 // --- 步骤 4: 提取 <dialogtext> 标签中的剧情数据 (宽容模式) ---
   const dialogRegex = new RegExp("<dialogtext>\\s*([\\s\\S]*?)\\s*</dialogtext>", "i");
         const dialogMatch = aiRawResponse.match(dialogRegex);
@@ -6114,6 +6132,11 @@ function triggerRegenerateClick() {
         isStoryFinished = false; // 出错时解锁，允许重试
         showSysAlert("逻辑链路发生故障，请检查控制台或重新同步。");
     } finally {
+        stopLoadingState(); //gemini修改
+        if (btnCircle) { //gemini修改
+            btnCircle.style.opacity = "1"; //gemini修改
+            btnCircle.style.pointerEvents = "auto"; //gemini修改
+        } //gemini修改
         window.isManualFlowActive = false;
     }
 }
@@ -13808,7 +13831,59 @@ function confirmBranch(mid, summary) {
     }
 }
 
+let isSyncing = false; // 全局防抖锁
+let loadingTimerInterval = null; // 计时器
+let responseSeconds = 0; // 累计秒数
 
+// 开启 Loading 动画与计时
+function startLoadingState() {
+    const loader = document.getElementById("devLoading");
+    if (!loader) return;
+
+    loader.style.display = "flex";
+    responseSeconds = 0;
+    document.getElementById("responseTimer").innerText = "已响应: 0秒";
+    document.getElementById("streamPreview").innerText = "等待首字下发...";
+
+    // 1. 启动 Tips 轮换 (修复你之前定义了但没调用的问题)
+    startTipRotation();
+
+    // 2. 启动秒数计时
+    if (loadingTimerInterval) clearInterval(loadingTimerInterval);
+    loadingTimerInterval = setInterval(() => {
+        responseSeconds++;
+        document.getElementById("responseTimer").innerText = `已响应: ${responseSeconds}秒`;
+        
+        // 3. 顺便每秒轮询一次最后一楼的内容，实现流式预览
+        updateStreamPreview();
+    }, 1000);
+}
+
+// 停止 Loading
+function stopLoadingState() {
+    const loader = document.getElementById("devLoading");
+    if (loader) loader.style.display = "none";
+    
+    if (loadingTimerInterval) clearInterval(loadingTimerInterval);
+    if (tipInterval) clearInterval(tipInterval);
+    isSyncing = false; // 解锁
+}
+
+// 实时抓取流式文本
+function updateStreamPreview() {
+    try {
+        const lastMid = TavernHelper.getLastMessageId();
+        const msgs = TavernHelper.getChatMessages(lastMid);
+        if (msgs && msgs.length > 0 && msgs[0].role === 'assistant') {
+            let text = msgs[0].message || "";
+            // 过滤掉所有 HTML 标签，只显示纯文字预览
+            const cleanText = text.replace(/<[^>]*>?/gm, '').substring(0, 200);
+            document.getElementById("streamPreview").innerText = cleanText + (text.length > 200 ? "..." : "");
+        }
+    } catch (e) {
+        console.error("预览抓取失败", e);
+    }
+}
 </script>
   </body>
 </html>
