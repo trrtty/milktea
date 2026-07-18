@@ -5967,10 +5967,16 @@ let bounceData = {
 };
 
 // 通知系统状态
-let notificationState = {
+// --- [红点状态管理：支持本地记忆] ---
+let notificationState = JSON.parse(localStorage.getItem('milktea_notifications')) || {
     hasForumUpdate: false,
-    unreadChats: new Set() // 记录有新消息的联系人 ID
+    unreadChats: [] // 改用数组方便存储
 };
+
+// 内部辅助：保存红点状态到浏览器
+function saveNotificationState() {
+    localStorage.setItem('milktea_notifications', JSON.stringify(notificationState));
+}
       const TavernHelper = {
     async createChatMessages(msgs, ops) {
         return await window.createChatMessages(msgs, ops);
@@ -10579,27 +10585,32 @@ function createDefaultLayer(dbItem, z) {
         item.className = "chat-list-item";
         const avatarPath = `${customerBaseUrl}${chat.id}.JPG`;
         
-        // 检查这个联系人是否在未读集合中
-        const isUnread = notificationState.unreadChats.has(chat.id) || notificationState.unreadChats.has(chat.name);
+        // 【核心】检查当前联系人是否有未读消息
+        const isUnread = notificationState.unreadChats.includes(chat.id) || notificationState.unreadChats.includes(chat.name);
 
         item.onclick = () => openSimChatDetail(chat.id);
         item.innerHTML = `
-            <div class="item-avatar-wrap">
+            <div class="item-avatar-wrap" style="position:relative;">
                 <img src="${avatarPath}" class="item-avatar">
-                ${isUnread ? '<div class="dot-indicator" style="display:block;"></div>' : ''}
+                <!-- 红点 DOM -->
+                <div class="dot-indicator" style="display:${isUnread ? 'block' : 'none'}; top:0; right:0;"></div>
             </div>
             <div class="item-main">
                 <div class="item-row1">
                     <span class="item-name">${chat.name}</span>
                     <span class="item-time">${chat.time}</span>
                 </div>
-                <div class="item-msg" style="${isUnread ? 'font-weight:bold; color:#333;' : ''}">${chat.lastMsg}</div>
+                <div class="item-msg" style="${isUnread ? 'font-weight:900; color:#333;' : ''}">${chat.lastMsg}</div>
             </div>
         `;
         listContainer.appendChild(item);
     });
 }
-      function openSimChatDetail(id) {
+
+function openSimChatDetail(id) {
+  notificationState.unreadChats = notificationState.unreadChats.filter(id => id !== id && id !== chatData.name);
+saveNotificationState(); // 保存状态
+updateRedDotUI();       // 刷新总入口红点
         const chatData = phoneChatDB[id]; // 直接根据 ID 取对象
         currentChatId = id;
 
@@ -13650,74 +13661,74 @@ function getSelectedLayer() {
 /**
  * 处理 AI 生成完毕后的 Assistant 消息
  */
+/**
+ * 增强版 AI 回复解析器：支持剧情、变量同步和红点系统
+ */
  async function handleLLMResponse(messageId) {
     try {
         const msgs = TavernHelper.getChatMessages(messageId);
         if (!msgs || msgs.length === 0) return;
         const rawText = msgs[0].message || '';
 
-        // --- [新增] 解析 JSONPatch 触发红点 ---
+        // --- 1. [新增] 红点侦测逻辑 (解析 JSONPatch) ---
         const patchRegex = /<JSONPatch>([\s\S]*?)<\/JSONPatch>/i;
         const patchMatch = rawText.match(patchRegex);
         if (patchMatch) {
             try {
                 const patches = JSON.parse(patchMatch[1].trim());
                 patches.forEach(p => {
-                    // 如果路径包含论坛更新
+                    // 如果修改了论坛数据库，亮起论坛红点
                     if (p.path.includes("phoneForumDB")) {
                         notificationState.hasForumUpdate = true;
                     }
-                    // 如果路径包含私信更新，提取联系人ID
-                    // 路径格式通常为 /phoneChatDB/联系人名字/history/...
+                    // 如果修改了聊天历史，提取联系人 ID
                     if (p.path.includes("phoneChatDB")) {
                         const parts = p.path.split('/');
-                        if (parts[2]) notificationState.unreadChats.add(parts[2]);
+                        // 路径示例: /phoneChatDB/蛋糕店店主/history/-
+                        if (parts[2]) {
+                            const contactId = parts[2];
+                            if (!notificationState.unreadChats.includes(contactId)) {
+                                notificationState.unreadChats.push(contactId);
+                            }
+                        }
                     }
                 });
-                updateRedDotUI(); // 触发 UI 更新
+                saveNotificationState(); // 保存到本地
+                updateRedDotUI();       // 刷新界面显示
             } catch (e) {
-                console.error("JSONPatch 解析失败:", e);
+                console.error("JSONPatch 数据解析失败:", e);
             }
         }
 
-        // --- 步骤：提取 <dialogtext> ---
+        // --- 2. [原有] 提取剧情 <dialogtext> ---
         const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/i;
         const match = rawText.match(regex);
-        
         if (match) {
             let content = match[1].trim();
-            content = content.replace(/<!--[\s\S]*?-->/g, ""); // 剔除注释
-            
-            // 提取 JSON 数组部分
+            content = content.replace(/<!--[\s\S]*?-->/g, ""); 
             const start = content.indexOf('[');
             const end = content.lastIndexOf(']');
             if (start !== -1 && end !== -1) {
                 const jsonStr = content.substring(start, end + 1);
-                
-                // 更新全局剧情变量
                 dialogData = new Function(`return ${jsonStr}`)();
-                dialogIndex = -1; // 重置进度
+                dialogIndex = -1;
                 isStoryFinished = false; 
-                console.log("🎬 剧情数据已从楼层提取并更新");
             }
         }
 
-        // --- 步骤：解析变量 (MVU同步) ---
+        // --- 3. [原有] 同步变量并显示剧情 ---
         await reloadGameData(messageId);
-
-        // 2. 隐藏 Loading
         const loader = document.getElementById("devLoading");
         if (loader) loader.style.display = "none";
-
-        // 3. 自动开启第一条剧情对白
         nextDialog();
 
     } catch (e) {
-        console.error("❌ 解析回复失败:", e);
-        document.getElementById("devLoading").style.display = "none";
+        console.error("❌ 解析 AI 回复失败:", e);
+        if (document.getElementById("devLoading")) {
+            document.getElementById("devLoading").style.display = "none";
+        }
     }
 }
-
 /**
  * 强制从 MVU 刷新经营数值
  */
