@@ -5435,7 +5435,7 @@
           <!-- 5. 查看手机 -->
           <button class="nav-button" onclick="openLayer('layer-phone')">
             <img src="https://files.catbox.moe/7nbo56.png" alt="查看手机" />
-            <span>查看手机</span>
+            <span>修复roll查看手机</span>
           </button>
         </div>
         <div id="sysAlertOverlay" class="sys-alert-overlay">
@@ -5557,11 +5557,11 @@
   <!-- 随机原料弹球：层级为 1，在文字下方 -->
   <img id="loadingIngredient" 
        src="" 
-       style="position: absolute; width: 360px; height: 360px; cursor: pointer; z-index: 1; object-fit: contain; user-select: none; pointer-events: auto;"
+       style="position: absolute; width: 360px; height: 360px; cursor: pointer; z-index: 10; object-fit: contain; user-select: none; pointer-events: auto;"
        onclick="boostIngredient()" />
 
   <!-- 文本内容层：层级为 10，在球上方，pointer-events: none 让点击穿透到球上 -->
-  <div style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; pointer-events: none;">
+  <div style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1; pointer-events: none;">
       <div class="loading-text" style="font-size: 32px; color: #8b4513; font-weight: 900; text-shadow: 0 2px 10px rgba(255,255,255,0.8);">正在同步店长决策...</div>
       <div id="responseTimer" style="margin-top: 15px; color: #ff6b81; font-weight: bold; font-size: 24px;">已响应: 0秒</div>
       
@@ -13081,96 +13081,88 @@ function syncStoryUI(data) {
     const uiInfoBox = document.getElementById("charInfoBox");
     const dialogTriangle = document.getElementById("dialogTriangle");
 
-    // ==========================================
-    // 步骤 1: 物理清理（默认不显示立绘和信息框）
-    // ==========================================
-    if (moodContainer) moodContainer.innerHTML = ""; // 清空表情层
-    if (baseImg) baseImg.style.display = 'none';     // 隐藏立绘
-    if (uiInfoBox) uiInfoBox.style.display = 'none'; // 隐藏角色信息框
-    currentActiveCustomerId = ""; 
-    currentSpeakerName = "";
+    if (moodContainer) moodContainer.innerHTML = "";
 
-    // ==========================================
-    // 步骤 2: 处理特殊模式（小说模式）
-    // ==========================================
     if (data.type === "novel") {
         gameDialog.style.display = "none";
+        if (baseImg) baseImg.style.display = "none";
+        if (moodContainer) moodContainer.style.display = "none";
+        if (uiInfoBox) uiInfoBox.style.display = "none";
         novelLayer.style.display = "flex";
         novelBody.innerHTML = parseMarkdown(data.text);
         return;
     }
 
-    // 恢复对话框显示
     novelLayer.style.display = "none";
     gameDialog.style.display = "block";
     
-    // 环境更新（背景/天气）
     if (data.season || data.time || data.weather) updateEnvironmentUI(data);
 
     let speakerName = data.name;
-    // 判定是否为“无立绘”角色：旁白、系统、或者是你自己（玩家）
-    const isSpecialRole = (speakerName === "旁白" || speakerName === "系统" || speakerName === playerName);
-
-    // ==========================================
-    // 步骤 3: 只有“非特殊角色”才尝试加载立绘
-    // ==========================================
-    if (!isSpecialRole) {
+    const isSpecial = (speakerName === "旁白" || speakerName === "系统" || speakerName === playerName );
+    // --- 【Bug 修复开始】 ---
+    if (!isSpecial) {
         let targetId = data.id;
         let targetDesc = data.desc;
 
-        // 在数据库中搜寻该角色的详细信息
-        let foundChar = null;
+        // 无论 JSON 有没有给信息，都优先去数据库里搜人
         for (let key in customersDB) {
             if (customersDB[key].name === speakerName) {
-                foundChar = customersDB[key];
+                targetId = targetId || customersDB[key].id;
+                // 补全描述：JSON 声明 > 数据库描述 > 数据库短评 > 默认值
+                targetDesc = targetDesc || customersDB[key].desc || customersDB[key].shortDesc || "一位神秘的食客";
                 break; 
             }
         }
 
-        // 如果在数据库里找到了，或者 JSON 强制给了 ID
-        if (foundChar || targetId) {
-            currentActiveCustomerId = targetId || foundChar.id;
+        // 只要搜到了有效的 ID
+        if (targetId) {
+            currentActiveCustomerId = targetId;
             currentSpeakerName = speakerName;
             
-            // 填充信息框内容
-            const finalDesc = targetDesc || (foundChar ? (foundChar.desc || foundChar.shortDesc) : "一位神秘的食客");
+            // 【核心修正】：强制更新 DOM，不套在 if(换人) 的判断里
             document.querySelector(".character-name").innerText = speakerName;
-            document.querySelector(".character-desc").innerText = finalDesc;
+            document.querySelector(".character-desc").innerText = targetDesc;
             
-            // 执行显示
             baseImg.src = nobgBaseUrl + currentActiveCustomerId + ".png";
             baseImg.style.display = "block";
-            uiInfoBox.style.display = "block";
-
-            // 处理心情/表情叠加层
-            if (data.mood) {
-                const moods = Array.isArray(data.mood) ? data.mood : [data.mood];
-                moodContainer.style.display = "block";
-                moods.forEach(moodName => {
-                    if (!moodName) return;
-                    const img = document.createElement("img");
-                    img.src = `https://raw.githubusercontent.com/trrtty/milktea/main/consumers/${currentSpeakerName}/${moodName}.png`;
-                    img.className = "character-image"; 
-                    img.style.position = "absolute";
-                    img.style.top = "0"; img.style.left = "0";
-                    img.style.zIndex = "10";
-                    img.style.pointerEvents = "none";
-                    img.onerror = () => img.remove(); // 没找到图就删掉，不留碎图图标
-                    moodContainer.appendChild(img);
-                });
-            }
+            if (uiInfoBox) uiInfoBox.style.display = "block";
         }
     }
+    // --- 【Bug 修复结束】 ---
 
-    // 处理对话文本
+    if (data.action === "leave") {
+        currentActiveCustomerId = "";
+        currentSpeakerName = "";
+        if (baseImg) baseImg.style.display = 'none';
+        if (moodContainer) moodContainer.style.display = 'none';
+        if (uiInfoBox) uiInfoBox.style.display = 'none';
+    }
+
+    // 渲染表情
+    if (currentActiveCustomerId && data.mood) {
+        const moods = Array.isArray(data.mood) ? data.mood : [data.mood];
+        moods.forEach(moodName => {
+            if (!moodName) return;
+            const img = document.createElement("img");
+            img.src = `https://raw.githubusercontent.com/trrtty/milktea/main/consumers/${currentSpeakerName}/${moodName}.png`;
+            img.className = "character-image"; 
+            img.style.position = "absolute";
+            img.style.top = "0"; img.style.left = "0";
+            img.style.zIndex = "10";
+            img.style.pointerEvents = "none";
+            img.onerror = () => img.remove();
+            moodContainer.appendChild(img);
+        });
+        moodContainer.style.display = "block";
+    }
+
     if (data.text) {
         document.getElementById("dialogName").innerText = speakerName;
         document.getElementById("dialogText").innerText = data.text;
     }
 
-    // ==========================================
-    // 步骤 4: 后置功能处理（物品弹出、决策等）
-    // ==========================================
+    // 物品弹出逻辑
     if (data.item) {
         setTimeout(async () => {
             if (data.item.data) {
@@ -13183,9 +13175,13 @@ function syncStoryUI(data) {
     }
 
     if (data.sysAlert) setTimeout(() => showSysAlert(data.sysAlert), 300);
-    if (data.Mori) setTimeout(() => handleMoriCommand(data.Mori), 500);
-
-    // 决策三角形显示逻辑
+    if (data.Mori) {
+    // 延迟一点执行，配合对话框弹出的节奏
+    setTimeout(() => {
+        handleMoriCommand(data.Mori);
+    }, 500);
+}
+    // 决策三角形逻辑
     const isLastItem = (dialogIndex === dialogData.length - 1);
     if (isLastItem && dialogTriangle) {
         dialogTriangle.classList.add("decision-active-triangle");
@@ -13198,6 +13194,8 @@ function syncStoryUI(data) {
         dialogTriangle.onclick = null;
     }
 }
+// 统一决策呼出逻辑
+
 
 function openDecisionModal() {
     const choiceBox = document.getElementById("choiceOverlay");
@@ -13936,11 +13934,8 @@ async function handleRegenerateTurn() {
 
         console.log("✅ 时间回溯成功，自动开始播放剧情");
         
-        if (appSettings.pendingScenes && appSettings.pendingScenes.length > 0) {
-            await processSceneQueue(); // 发现有精修界面，立刻弹出
-        } else {
-            nextDialog(); // 没活干，正常播剧情
-        }
+        // 🔥 强制触发第一次剧情显示
+        nextDialog(); 
 
     } catch (e) {
         console.error(e);
