@@ -5966,14 +5966,12 @@ let bounceData = {
     friction: 0.985 // 速度衰减系数，越小停得越快
 };
 
-// 通知系统状态
-// --- [红点状态管理：支持本地记忆] ---
+// --- [红点系统：带本地记忆功能] ---
 let notificationState = JSON.parse(localStorage.getItem('milktea_notifications')) || {
     hasForumUpdate: false,
-    unreadChats: [] // 改用数组方便存储
+    unreadChats: [] 
 };
 
-// 内部辅助：保存红点状态到浏览器
 function saveNotificationState() {
     localStorage.setItem('milktea_notifications', JSON.stringify(notificationState));
 }
@@ -10608,56 +10606,39 @@ function createDefaultLayer(dbItem, z) {
 }
 
 function openSimChatDetail(id) {
-    const chatData = phoneChatDB[id]; // 必须先定义数据
+    const chatData = phoneChatDB[id];
     if (!chatData) return;
-
     currentChatId = id;
 
-    // --- [核心修复：消除该联系人的红点] ---
-    // 过滤掉当前点击的这个 ID 和 名字
-    notificationState.unreadChats = notificationState.unreadChats.filter(item => item !== id && item !== chatData.name);
+    // --- 核心修复：消除该联系人的红点 ---
+    // 过滤掉所有匹配 ID 或 名字的未读记录
+    notificationState.unreadChats = notificationState.unreadChats.filter(name => name !== id && name !== chatData.name);
     
-    saveNotificationState(); // 保存状态
-    updateRedDotUI();       // 刷新总入口和图标上的红点
-    
-    // 以下是原有的渲染逻辑
+    saveNotificationState();
+    updateRedDotUI(); 
+
+    // UI 渲染逻辑
     document.getElementById("detail-name").innerText = chatData.name;
     const bubbleBox = document.getElementById("sim-chat-bubbles");
     bubbleBox.innerHTML = "";
-
     const customerAvatar = `${customerBaseUrl}${chatData.id}.JPG`;
 
     chatData.history.forEach((m) => {
-        if (m.type === "time") {
-            const div = document.createElement("div");
-            div.className = "chat-time-divider";
-            div.innerText = m.text;
-            bubbleBox.appendChild(div);
+        const b = document.createElement("div");
+        b.className = "bubble " + (m.type === "time" ? "chat-time-divider" : m.type);
+        if (m.type === "received") {
+            b.innerHTML = `<div class="bubble-avatar"><img src="${customerAvatar}"></div><div class="bubble-content">${m.text}</div>`;
+        } else if (m.type === "sent") {
+            b.innerHTML = `<div class="user_avatar"></div><div class="bubble-content">${m.text}</div>`;
         } else {
-            const b = document.createElement("div");
-            b.className = "bubble " + m.type;
-            if (m.type === "received") {
-                b.innerHTML = `
-                    <div class="bubble-avatar" onclick="jumpToDossierFromChat('${chatData.id}')" style="cursor:pointer;">
-                        <img src="${customerAvatar}">
-                    </div>
-                    <div class="bubble-content">${m.text}</div>`;
-            } else {
-                b.innerHTML = `
-                    <div class="user_avatar"></div>
-                    <div class="bubble-content">${m.text}</div>`;
-            }
-            bubbleBox.appendChild(b);
+            b.innerText = m.text;
         }
+        bubbleBox.appendChild(b);
     });
 
     navigateToPhone("chat-detail");
-    setTimeout(() => {
-        if (bubbleBox) bubbleBox.scrollTop = bubbleBox.scrollHeight;
-    }, 50); 
+    setTimeout(() => { if (bubbleBox) bubbleBox.scrollTop = bubbleBox.scrollHeight; }, 50); 
 }
-      // 注入初始化逻辑
-
       function jumpToDossierFromChat(id) {
         dossierBackTarget = "chat"; // 标记标记：我是从聊天界面跳过来的
         openLayer("layer-customer"); // 打开档案层
@@ -13654,22 +13635,21 @@ async function handleLLMResponse(messageId) {
         if (!msgs || msgs.length === 0) return;
         const rawText = msgs[0].message || '';
 
-        // --- 1. [红点解析] ---
+        // --- 1. 红点指令解析 ---
         const patchRegex = /<JSONPatch>([\s\S]*?)<\/JSONPatch>/i;
         const patchMatch = rawText.match(patchRegex);
         if (patchMatch) {
             try {
                 const patches = JSON.parse(patchMatch[1].trim());
                 patches.forEach(p => {
-                    // 论坛更新
+                    // 论坛红点
                     if (p.path.includes("phoneForumDB")) {
                         notificationState.hasForumUpdate = true;
                     }
-                    // 私信更新：从路径中提取联系人 ID
+                    // 私信红点
                     if (p.path.includes("phoneChatDB")) {
                         const parts = p.path.split('/');
-                        // 如果路径是 /phoneChatDB/码农/history/-，parts[2] 就是 "码农"
-                        const contactKey = parts[2];
+                        const contactKey = parts[2]; // 提取路径里的联系人名字
                         if (contactKey && !notificationState.unreadChats.includes(contactKey)) {
                             notificationState.unreadChats.push(contactKey);
                         }
@@ -13680,7 +13660,7 @@ async function handleLLMResponse(messageId) {
             } catch (e) { console.error("JSONPatch解析失败", e); }
         }
 
-        // --- 2. [剧情解析] ---
+        // --- 2. 剧情解析 ---
         const dialogRegex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/i;
         const dialogMatch = rawText.match(dialogRegex);
         if (dialogMatch) {
@@ -13695,17 +13675,12 @@ async function handleLLMResponse(messageId) {
             }
         }
 
-        // --- 3. [数据同步] ---
         await reloadGameData(messageId);
-        const loader = document.getElementById("devLoading");
-        if (loader) loader.style.display = "none";
-        nextDialog();
-
-    } catch (e) {
-        console.error("❌ 处理回复失败:", e);
         if (document.getElementById("devLoading")) document.getElementById("devLoading").style.display = "none";
-    }
+        nextDialog();
+    } catch (e) { console.error("AI回复处理失败", e); }
 }
+
 async function reloadGameData(mid) {
     try {
         // 获取该楼层关联的变量快照
@@ -14269,23 +14244,25 @@ async function dismissPhoneMatch(matchTitle) {
 }
 
 function updateRedDotUI() {
+    if (typeof notificationState === 'undefined') return;
+
     const hasAnyUpdate = notificationState.hasForumUpdate || notificationState.unreadChats.length > 0;
     
-    // 1. 大堂底部“查看手机”按钮
+    // 1. 底栏“查看手机”按钮 (查找包含 layer-phone 的按钮)
     const phoneNavBtn = document.querySelector(".nav-button[onclick*='layer-phone']");
     if (phoneNavBtn) {
         let dot = phoneNavBtn.querySelector(".dot-indicator") || createDot(phoneNavBtn);
         dot.style.display = hasAnyUpdate ? "block" : "none";
     }
 
-    // 2. 手机桌面图标 (消息列表)
+    // 2. 手机桌面 - 消息列表图标
     const chatApp = document.querySelector(".app-item[onclick*='chat-list']");
     if (chatApp) {
         let dot = chatApp.querySelector(".dot-indicator") || createDot(chatApp);
         dot.style.display = notificationState.unreadChats.length > 0 ? "block" : "none";
     }
 
-    // 3. 手机桌面图标 (超话论坛)
+    // 3. 手机桌面 - 论坛图标
     const forumApp = document.querySelector(".app-item[onclick*='forum']");
     if (forumApp) {
         let dot = forumApp.querySelector(".dot-indicator") || createDot(forumApp);
@@ -14293,7 +14270,6 @@ function updateRedDotUI() {
     }
 }
 
-// 辅助工具：如果没红点就建一个
 function createDot(parent) {
     const dot = document.createElement("div");
     dot.className = "dot-indicator";
