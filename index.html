@@ -5939,7 +5939,13 @@ let loadingTimerInterval = null; // 计时器
 let responseSeconds = 0; // 累计秒数
 let tipInterval = null;
 let bounceInterval = null;
-
+let bounceData = { 
+    x: 0, y: 0, 
+    vx: 0, vy: 0, 
+    w: 360, h: 360, 
+    rotation: 0, // 新增：记录当前的旋转角度
+    friction: 0.99 // 稍微调高一点摩擦力，让它滑得更久
+};
       const TavernHelper = {
     async createChatMessages(msgs, ops) {
         return await window.createChatMessages(msgs, ops);
@@ -13076,16 +13082,17 @@ function syncStoryUI(data) {
     const dialogTriangle = document.getElementById("dialogTriangle");
 
     // ==========================================
-    // 🔥 【核心增加】：初始全量清理逻辑
-    // 每一句开始前，默认先隐藏所有立绘、心情和名字信息框
+    // 步骤 1: 物理清理（默认不显示立绘和信息框）
     // ==========================================
-    if (moodContainer) moodContainer.innerHTML = "";
-    if (baseImg) baseImg.style.display = "none";
-    if (uiInfoBox) uiInfoBox.style.display = "none";
-    currentActiveCustomerId = "";
+    if (moodContainer) moodContainer.innerHTML = ""; // 清空表情层
+    if (baseImg) baseImg.style.display = 'none';     // 隐藏立绘
+    if (uiInfoBox) uiInfoBox.style.display = 'none'; // 隐藏角色信息框
+    currentActiveCustomerId = ""; 
     currentSpeakerName = "";
 
-    // 1. 处理小说模式
+    // ==========================================
+    // 步骤 2: 处理特殊模式（小说模式）
+    // ==========================================
     if (data.type === "novel") {
         gameDialog.style.display = "none";
         novelLayer.style.display = "flex";
@@ -13093,48 +13100,49 @@ function syncStoryUI(data) {
         return;
     }
 
-    // 2. 恢复普通对话框显示
+    // 恢复对话框显示
     novelLayer.style.display = "none";
     gameDialog.style.display = "block";
     
-    // 环境背景更新
+    // 环境更新（背景/天气）
     if (data.season || data.time || data.weather) updateEnvironmentUI(data);
 
     let speakerName = data.name;
-    // 判断是否为特殊角色（不显示立绘）
-    const isSpecial = (speakerName === "旁白" || speakerName === "系统" || speakerName === playerName);
+    // 判定是否为“无立绘”角色：旁白、系统、或者是你自己（玩家）
+    const isSpecialRole = (speakerName === "旁白" || speakerName === "系统" || speakerName === playerName);
 
     // ==========================================
-    // 3. 只有当“非特殊角色”时，才尝试寻找并显示立绘
+    // 步骤 3: 只有“非特殊角色”才尝试加载立绘
     // ==========================================
-    if (!isSpecial) {
+    if (!isSpecialRole) {
         let targetId = data.id;
         let targetDesc = data.desc;
 
-        // 在数据库里搜人
+        // 在数据库中搜寻该角色的详细信息
+        let foundChar = null;
         for (let key in customersDB) {
             if (customersDB[key].name === speakerName) {
-                targetId = targetId || customersDB[key].id;
-                targetDesc = targetDesc || customersDB[key].desc || customersDB[key].shortDesc || "一位神秘的食客";
+                foundChar = customersDB[key];
                 break; 
             }
         }
 
-        // 如果找到了有效的 ID，则重新打开显示
-        if (targetId) {
-            currentActiveCustomerId = targetId;
+        // 如果在数据库里找到了，或者 JSON 强制给了 ID
+        if (foundChar || targetId) {
+            currentActiveCustomerId = targetId || foundChar.id;
             currentSpeakerName = speakerName;
             
-            // 更新 UI 内容
+            // 填充信息框内容
+            const finalDesc = targetDesc || (foundChar ? (foundChar.desc || foundChar.shortDesc) : "一位神秘的食客");
             document.querySelector(".character-name").innerText = speakerName;
-            document.querySelector(".character-desc").innerText = targetDesc;
+            document.querySelector(".character-desc").innerText = finalDesc;
             
-            // 显示立绘和信息框
+            // 执行显示
             baseImg.src = nobgBaseUrl + currentActiveCustomerId + ".png";
             baseImg.style.display = "block";
-            if (uiInfoBox) uiInfoBox.style.display = "block";
+            uiInfoBox.style.display = "block";
 
-            // 渲染心情/表情
+            // 处理心情/表情叠加层
             if (data.mood) {
                 const moods = Array.isArray(data.mood) ? data.mood : [data.mood];
                 moodContainer.style.display = "block";
@@ -13147,29 +13155,22 @@ function syncStoryUI(data) {
                     img.style.top = "0"; img.style.left = "0";
                     img.style.zIndex = "10";
                     img.style.pointerEvents = "none";
-                    img.onerror = () => img.remove();
+                    img.onerror = () => img.remove(); // 没找到图就删掉，不留碎图图标
                     moodContainer.appendChild(img);
                 });
             }
         }
     }
 
-    // 4. 处理文本内容
+    // 处理对话文本
     if (data.text) {
         document.getElementById("dialogName").innerText = speakerName;
         document.getElementById("dialogText").innerText = data.text;
     }
 
-    // 处理特殊动作（离开）
-    if (data.action === "leave") {
-        currentActiveCustomerId = "";
-        currentSpeakerName = "";
-        if (baseImg) baseImg.style.display = 'none';
-        if (moodContainer) moodContainer.style.display = 'none';
-        if (uiInfoBox) uiInfoBox.style.display = 'none';
-    }
-
-    // 5. 物品弹出逻辑
+    // ==========================================
+    // 步骤 4: 后置功能处理（物品弹出、决策等）
+    // ==========================================
     if (data.item) {
         setTimeout(async () => {
             if (data.item.data) {
@@ -13181,11 +13182,10 @@ function syncStoryUI(data) {
         }, 400);
     }
 
-    // 系统提示与 Mori 指令
     if (data.sysAlert) setTimeout(() => showSysAlert(data.sysAlert), 300);
     if (data.Mori) setTimeout(() => handleMoriCommand(data.Mori), 500);
 
-    // 6. 决策三角形逻辑
+    // 决策三角形显示逻辑
     const isLastItem = (dialogIndex === dialogData.length - 1);
     if (isLastItem && dialogTriangle) {
         dialogTriangle.classList.add("decision-active-triangle");
@@ -13198,6 +13198,7 @@ function syncStoryUI(data) {
         dialogTriangle.onclick = null;
     }
 }
+
 function openDecisionModal() {
     const choiceBox = document.getElementById("choiceOverlay");
     document.getElementById("fixedOptions").style.display = "none";
@@ -13971,18 +13972,6 @@ function startTipRotation() {
 
 
 
-// 物理配置
-let bounceData = { 
-    x: 0, y: 0, 
-    vx: 0, vy: 0, 
-    w: 360, h: 360, 
-    rotation: 0, 
-    vr: 0,           // 旋转速度 (Velocity of Rotation)
-    gravity: 0.6,    // 重力加速度
-    bounce: 0.75,    // 弹性系数 (撞墙后保留多少速度，0.75比较自然)
-    friction: 0.985  // 空气阻力/摩擦力
-};
-
 function startLoadingState() {
     const loader = document.getElementById("devLoading");
     const ingImg = document.getElementById("loadingIngredient");
@@ -13990,24 +13979,26 @@ function startLoadingState() {
 
     loader.style.display = "flex";
     
+    // 强制刷新一次布局，确保拿到正确的 clientHeight (应该是 1312)
     const containerW = loader.clientWidth || 736;
     const containerH = loader.clientHeight || 1312;
 
-    // 随机图片
+    // 2. 随机原料
     const validIngs = ingredientsDB.filter(i => !i.isFixed);
     const randomIng = validIngs[Math.floor(Math.random() * validIngs.length)];
     ingImg.src = `${imgBaseUrl}${randomIng.baseImageName || randomIng.name}.PNG`;
 
-    // 初始状态：从上方随机位置掉落
-    bounceData.x = Math.random() * (containerW - bounceData.w);
-    bounceData.y = -bounceData.h; 
+    // 3. 初始位置：彻底居中 (736/2 - 360/2, 1312/2 - 360/2)
+    bounceData.x = containerW / 2 - bounceData.w / 2;
+    bounceData.y = containerH / 2 - bounceData.h / 2;
     
-    // 给个初始的斜向初速度
-    bounceData.vx = (Math.random() - 0.5) * 20; 
-    bounceData.vy = 5; 
-    bounceData.vr = (Math.random() - 0.5) * 10; // 初始旋转
+    bounceData.vx = (Math.random() - 0.5) * 10; // 给个初始微小速度，防止完全不动
+    bounceData.vy = (Math.random() - 0.5) * 10;
 
-    // UI 计时器
+    ingImg.style.left = bounceData.x + "px";
+    ingImg.style.top = bounceData.y + "px";
+
+    // 启动计时器
     responseSeconds = 0;
     document.getElementById("responseTimer").innerText = `已响应: 0秒`;
     startTipRotation();
@@ -14017,9 +14008,8 @@ function startLoadingState() {
         document.getElementById("responseTimer").innerText = `已响应: ${responseSeconds}秒`;
     }, 1000);
 
-    // 启动物理引擎
     if (bounceInterval) clearInterval(bounceInterval);
-    bounceInterval = setInterval(runBounceLogic, 16); // ~60帧
+    bounceInterval = setInterval(runBounceLogic, 16);
 }
 
 function runBounceLogic() {
@@ -14027,68 +14017,67 @@ function runBounceLogic() {
     const ingImg = document.getElementById("loadingIngredient");
     if (!loader || !ingImg || loader.style.display === "none") return;
 
+    // 关键：获取实时容器尺寸
     const containerW = loader.clientWidth || 736;
     const containerH = loader.clientHeight || 1312;
 
-    // 1. 应用物理法则
-    bounceData.vy += bounceData.gravity; // 应用重力
-    bounceData.vx *= bounceData.friction; // 应用水平阻力
-    bounceData.vy *= bounceData.friction; // 应用垂直阻力
-    bounceData.vr *= 0.99;                // 旋转阻力
-
-    // 2. 更新坐标
+    bounceData.vx *= bounceData.friction;
+    bounceData.vy *= bounceData.friction;
     bounceData.x += bounceData.vx;
     bounceData.y += bounceData.vy;
-    bounceData.rotation += bounceData.vr;
 
-    // 3. 边界碰撞逻辑（带能量损耗）
-    // 撞地面
-    if (bounceData.y + bounceData.h > containerH) {
-        bounceData.y = containerH - bounceData.h;
-        bounceData.vy = -Math.abs(bounceData.vy) * bounceData.bounce;
-        // 撞地时根据水平速度增加旋转
-        bounceData.vr += bounceData.vx * 0.2;
-    }
-    // 撞天花板
-    else if (bounceData.y < 0) {
-        bounceData.y = 0;
-        bounceData.vy = Math.abs(bounceData.vy) * bounceData.bounce;
-    }
-
-    // 撞左墙
-    if (bounceData.x < 0) {
+    // --- 边界检查 ---
+    // 左右反弹
+    if (bounceData.x <= 0) {
+        bounceData.vx = Math.abs(bounceData.vx) * 0.8;
         bounceData.x = 0;
-        bounceData.vx = Math.abs(bounceData.vx) * bounceData.bounce;
-        bounceData.vr += bounceData.vy * 0.1; // 撞墙产生扭矩
-    }
-    // 撞右墙
-    else if (bounceData.x + bounceData.w > containerW) {
+    } else if (bounceData.x + bounceData.w >= containerW) {
+        bounceData.vx = -Math.abs(bounceData.vx) * 0.8;
         bounceData.x = containerW - bounceData.w;
-        bounceData.vx = -Math.abs(bounceData.vx) * bounceData.bounce;
-        bounceData.vr -= bounceData.vy * 0.1;
     }
 
-    // 4. 应用样式 (使用 translate3d 性能更好)
+    // 上下反弹
+    if (bounceData.y <= 0) {
+        bounceData.vy = Math.abs(bounceData.vy) * 0.8;
+        bounceData.y = 0;
+    } else if (bounceData.y + bounceData.h >= containerH) {
+        // 🔥 如果之前只在上面弹，说明这里的 containerH 之前拿错了
+        bounceData.vy = -Math.abs(bounceData.vy) * 0.8;
+        bounceData.y = containerH - bounceData.h;
+    }
+
+    // 旋转逻辑（保持丝滑）
+    const speed = Math.sqrt(bounceData.vx ** 2 + bounceData.vy ** 2);
+    if (speed > 0.1) {
+        bounceData.rotation += speed * 0.5 * (bounceData.vx > 0 ? 1 : -1);
+    }
+
     ingImg.style.left = bounceData.x + "px";
     ingImg.style.top = bounceData.y + "px";
     ingImg.style.transform = `rotate(${bounceData.rotation}deg)`;
 }
-
-// 互动点击：像“踢球”一样
+// 修改点击互动：增加随机性
 function boostIngredient() {
-    // 向上方爆发性弹起
-    bounceData.vy = -25 - Math.random() * 15;
-    bounceData.vx = (Math.random() - 0.5) * 40;
-    bounceData.vr = (Math.random() - 0.5) * 30; // 产生剧烈旋转
+    // 每次点击赋予一个更猛的冲力
+    const speed = 25 + Math.random() * 15;
+    const angle = Math.random() * Math.PI * 2;
     
-    // 视觉特效：点击瞬间缩小一下再恢复（模拟受力变形）
+    bounceData.vx = Math.cos(angle) * speed;
+    bounceData.vy = Math.sin(angle) * speed;
+    
+    // 视觉反馈：点击时除了放大，增加一个亮光感
     const ingImg = document.getElementById("loadingIngredient");
-    ingImg.style.transition = "transform 0.05s";
-    ingImg.style.transform = `rotate(${bounceData.rotation}deg) scale(0.8)`;
-    setTimeout(() => {
+    ingImg.style.transition = "transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.1s";
+    ingImg.style.transform = `rotate(${bounceData.rotation}deg) scale(1.3)`;
+    ingImg.style.filter = "brightness(1.5) drop-shadow(0 0 20px rgba(255,107,129,0.5))";
+    
+    setTimeout(() => { 
         ingImg.style.transition = "none";
-    }, 50);
+        ingImg.style.transform = `rotate(${bounceData.rotation}deg) scale(1)`;
+        ingImg.style.filter = "brightness(1) drop-shadow(0 10px 20px rgba(0,0,0,0.1))";
+    }, 150);
 }
+// 停止加载
 function stopLoadingState() {
     const loader = document.getElementById("devLoading");
     if (loader) loader.style.display = "none";
