@@ -14309,35 +14309,49 @@ function stopLoadingState() {
 }
 
 /**
- * 研发室：随机选取 5-8 个原料
+ * 研发室：随机灵感选取 5-8 个原料
+ * 约束：必须包含至少一个名字带“全层”的基底
  */
  function randomizeIngredients() {
     // 1. 获取所有当前已解锁的非固定原料
     const pool = Object.values(unlockedIngredients).filter(i => !i.isFixed);
     
-    if (pool.length < 5) {
-        showSysAlert("库房里的原料种类太少啦（不足5种），快去多解锁一些吧！");
+    // 2. 筛选出所有名字带“全层”的备选基底
+    const fullLayerPool = pool.filter(i => i.name.includes("全层"));
+
+    if (fullLayerPool.length === 0) {
+        showSysAlert("库存里还没有解锁任何带有‘全层’字样的基底，无法生成比例协调的随机配方！");
         return;
     }
 
-    // 2. 清空当前所有选中（保留固定层）
+    if (pool.length < 5) {
+        showSysAlert("原料种类太少（不足5种），随机系统无法正常运作。");
+        return;
+    }
+
+    // 3. 清空当前所有选中（保留固定层）
     selectedIngredients.clear();
     ingredientsDB.filter(i => i.isFixed).forEach(i => selectedIngredients.add(i.id));
 
-    // 3. 决定随机抽取的数量 (5-8)
-    const targetCount = Math.floor(Math.random() * 4) + 5; // 产生 5, 6, 7, 8 中的一个
-    const actualCount = Math.min(pool.length, targetCount);
+    // 4. 【核心步骤】：强制先选出一个“全层”原料
+    const mustHave = fullLayerPool[Math.floor(Math.random() * fullLayerPool.length)];
+    selectedIngredients.add(mustHave.id);
 
-    // 4. 洗牌算法抽取
-    const shuffled = [...pool].sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, actualCount);
+    // 5. 决定总共还要再选几个 (目标总数 5-8 个，所以再选 4-7 个)
+    const totalTarget = Math.floor(Math.random() * 4) + 5; 
+    const neededMore = totalTarget - 1;
 
-    // 5. 注入选中集合并更新 UI
-    selected.forEach(item => {
+    // 6. 从剩下的池子里（排除掉刚才选中的那个）洗牌抽取
+    const remainingPool = pool.filter(i => i.id !== mustHave.id);
+    const shuffled = remainingPool.sort(() => 0.5 - Math.random());
+    const luckyOnes = shuffled.slice(0, neededMore);
+
+    // 7. 注入选中集合
+    luckyOnes.forEach(item => {
         selectedIngredients.add(item.id);
     });
 
-    // 6. 刷新按钮的高亮状态
+    // 8. 刷新按钮的高亮状态
     document.querySelectorAll(".ingredient-btn").forEach(btn => {
         const id = btn.id.replace("btn-", "");
         if (selectedIngredients.has(id)) {
@@ -14347,18 +14361,12 @@ function stopLoadingState() {
         }
     });
 
-    // 7. 更新画布和详情预览（显示抽中的第一个原料的信息）
+    // 9. 更新画布和详情预览
     updateCanvas();
-    if (selected.length > 0) {
-        showIngredientInfo(selected[0].id);
-    }
+    showIngredientInfo(mustHave.id); // 默认展示抽中的那个全层原料信息
 
-    // 8. 简单的交互反馈
-    console.log(`🎲 随机灵感：选取了 ${actualCount} 种原料组合。`);
-
-
+    console.log(`🎲 随机灵感：已选取以【${mustHave.name}】为核心的 ${selectedIngredients.size - 2} 种搭配。`);
 }
-
 
 /**
  * 忽略/移除这条委托邀约
