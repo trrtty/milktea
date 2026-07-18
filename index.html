@@ -4174,6 +4174,21 @@
                       <div class="bg-preview-img" style="display:flex; align-items:center; justify-content:center; font-size:40px; color:#ccc;">🚫</div>
                       <b style="font-size:20px;">纯净模式</b>
                   </div>
+
+
+                  
+    <!-- 🔥 新增：自定义纯色（点击弹出色盘） -->
+    <div class="bg-option-card" id="bg-opt-custom" style="position: relative; overflow: hidden;">
+      <div class="bg-preview-img" id="bg-custom-preview" style="display:flex; align-items:center; justify-content:center; font-size:40px; background:#ffffff; transition: background 0.2s;">
+          🎨
+      </div>
+      <b style="font-size:20px;">自定义纯色</b>
+      <!-- 隐形但覆盖整张卡片的调色盘输入框 -->
+      <input type="color" id="custom-bg-color-picker" value="#ffffff" 
+             style="position: absolute; inset: 0; opacity: 0; cursor: pointer; width:100%; height:100%;" 
+             oninput="updateCustomBgPreview(this.value)"
+             onchange="updateAppBackground(this.value)" />
+  </div>
                   <div class="bg-option-card" id="bg-opt-背景1" onclick="updateAppBackground('背景1')">
                       <img src="https://raw.githubusercontent.com/trrtty/milktea/refs/heads/main/ingredient/背景1.PNG" class="bg-preview-img">
                       <b style="font-size:20px;">小花</b>
@@ -5542,11 +5557,11 @@
   <!-- 随机原料弹球：层级为 1，在文字下方 -->
   <img id="loadingIngredient" 
        src="" 
-       style="position: absolute; width: 360px; height: 360px; cursor: pointer; z-index: 1; object-fit: contain; user-select: none; pointer-events: auto;"
+       style="position: absolute; width: 360px; height: 360px; cursor: pointer; z-index: 10; object-fit: contain; user-select: none; pointer-events: auto;"
        onclick="boostIngredient()" />
 
   <!-- 文本内容层：层级为 10，在球上方，pointer-events: none 让点击穿透到球上 -->
-  <div style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; pointer-events: none;">
+  <div style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1; pointer-events: none;">
       <div class="loading-text" style="font-size: 32px; color: #8b4513; font-weight: 900; text-shadow: 0 2px 10px rgba(255,255,255,0.8);">正在同步店长决策...</div>
       <div id="responseTimer" style="margin-top: 15px; color: #ff6b81; font-weight: bold; font-size: 24px;">已响应: 0秒</div>
       
@@ -5927,8 +5942,9 @@ let bounceInterval = null;
 let bounceData = { 
     x: 0, y: 0, 
     vx: 0, vy: 0, 
-    w: 240, h: 240, 
-    friction: 0.985 // 速度衰减系数，越小停得越快
+    w: 300, h: 300, 
+    rotation: 0, // 新增：记录当前的旋转角度
+    friction: 0.99 // 稍微调高一点摩擦力，让它滑得更久
 };
       const TavernHelper = {
     async createChatMessages(msgs, ops) {
@@ -8036,22 +8052,24 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
 
     // 2. 【核心修复】：渲染全局奶茶背景
     // 检查 appSettings 是否存在以及是否选择了背景
-    if (typeof appSettings !== 'undefined' && appSettings.drinkBackground) {
-        const bgImg = document.createElement("img");
-        // 拼接路径：基础URL + 背景名 + .PNG (注意大小写要匹配GitHub)
-        bgImg.src = `${imgBaseUrl}${appSettings.drinkBackground}.PNG`;
-        bgImg.className = "layer-img";
-        bgImg.style.zIndex = "1"; // 设为 1，确保在所有原料之下
-        bgImg.style.display = "block";
-        bgImg.style.pointerEvents = "none";
-        
-        // 增加加载失败监听，方便调试
-        bgImg.onerror = () => console.error("❌ 背景图加载失败:", bgImg.src);
-        
-        canvas.appendChild(bgImg);
-        console.log("🖼️ 研发室背景已注入:", appSettings.drinkBackground);
+    // --- 在这里画背景 ---
+    if (appSettings && appSettings.drinkBackground) {
+        if (appSettings.drinkBackground.startsWith('#')) {
+            // 如果是色盘颜色，创建一个色块
+            const bgDiv = document.createElement("div");
+            bgDiv.style.cssText = `position:absolute; inset:0; background:${appSettings.drinkBackground}; z-index:1; pointer-events:none;`;
+            canvas.appendChild(bgDiv);
+        } else {
+            // 如果是图片名字，创建一个图片
+            const bgImg = document.createElement("img");
+            bgImg.src = `${imgBaseUrl}${appSettings.drinkBackground}.PNG`;
+            bgImg.className = "layer-img";
+            bgImg.style.zIndex = "1";
+            bgImg.style.pointerEvents = "none";
+            canvas.appendChild(bgImg);
+        }
     }
-
+    
     // 3. 收集并排序选中的原料
     const activeItems = [];
     selectedIngredients.forEach((id) => {
@@ -8323,108 +8341,97 @@ let editorState = {
       }
       // 2. 渲染核心
       function renderEditor() {
-        const stage = document.getElementById("editor-stage");
-        const list = document.getElementById("editor-layer-list");
+    const stage = document.getElementById("editor-stage");
+    const list = document.getElementById("editor-layer-list");
+    if (!stage || !list) return;
 
-        stage.innerHTML = "";
-        list.innerHTML = "";
-        if (typeof appSettings !== 'undefined' && appSettings.drinkBackground) {
-        const bgImg = document.createElement("img");
-        bgImg.src = `${imgBaseUrl}${appSettings.drinkBackground}.PNG`;
-        bgImg.style.cssText = "position:absolute; left:0; top:0; width:650px; height:650px; z-index:0; pointer-events:none;";
-        stage.appendChild(bgImg);
+    // 清空画布和列表
+    stage.innerHTML = "";
+    list.innerHTML = "";
+
+    // --- 【新增：背景绘制逻辑】 ---
+    if (typeof appSettings !== 'undefined' && appSettings.drinkBackground) {
+        if (appSettings.drinkBackground.startsWith('#')) {
+            // A. 如果是色盘颜色，创建一个背景色块
+            const bgDiv = document.createElement("div");
+            bgDiv.style.cssText = `position:absolute; left:0; top:0; width:650px; height:650px; background:${appSettings.drinkBackground}; z-index:0; pointer-events:none;`;
+            stage.appendChild(bgDiv);
+        } else {
+            // B. 如果是图片背景，创建一个背景图层
+            const bgImg = document.createElement("img");
+            bgImg.src = `${imgBaseUrl}${appSettings.drinkBackground}.PNG`;
+            bgImg.style.cssText = "position:absolute; left:0; top:0; width:650px; height:650px; z-index:0; pointer-events:none;";
+            stage.appendChild(bgImg);
+        }
     }
-        const sortedLayers = [...editorState.layers].sort(
-          (a, b) => a.zIndex - b.zIndex,
-        );
 
-        sortedLayers.forEach((layer) => {
-          const img = document.createElement("img");
-          img.src = layer.src;
-          img.className = "absolute transition-all duration-100 select-none";
+    // 1. 绘制画布中的配方图层
+    const sortedLayers = [...editorState.layers].sort((a, b) => a.zIndex - b.zIndex);
 
-          img.style.left = layer.x + "px";
-          img.style.top = layer.y + "px";
-          img.style.width = layer.width * layer.scale + "px";
-          img.style.height = layer.height * layer.scale + "px";
-          img.style.zIndex = layer.zIndex;
+    sortedLayers.forEach((layer) => {
+        const img = document.createElement("img");
+        img.src = layer.src;
+        img.className = "absolute transition-all duration-100 select-none";
 
-          applyEditorFilters(img, layer);
+        img.style.left = layer.x + "px";
+        img.style.top = layer.y + "px";
+        img.style.width = layer.width * layer.scale + "px";
+        img.style.height = layer.height * layer.scale + "px";
+        img.style.zIndex = layer.zIndex;
 
-          // 移除选中图层时的发光效果
-          // if (layer.id === editorState.selectedId) {
-          //     img.style.filter += ' drop-shadow(0 0 8px rgba(139, 69, 19, 0.5))';
-          // }
+        // 应用滤镜（透明度、亮度、对比度、染色）
+        applyEditorFilters(img, layer);
 
-          img.onmousedown = (e) => {
+        // 点击选中逻辑
+        img.onmousedown = (e) => {
             e.stopPropagation();
             selectLayer(layer.uid);
-          };
+        };
 
-          stage.appendChild(img);
-        });
+        stage.appendChild(img);
+    });
 
-        // B. 渲染列表 (加大了尺寸)
-// B. 渲染列表 (尺寸放大 + 实时染色 + 名称匹配)
-[...sortedLayers].reverse().forEach((layer) => {
-          const item = document.createElement("div");
-          const isSelected = layer.uid === editorState.selectedId;
+    // 2. 绘制底部的图层选择缩略图列表
+    [...sortedLayers].reverse().forEach((layer) => {
+        const item = document.createElement("div");
+        const isSelected = layer.uid === editorState.selectedId;
 
-          // 1. 查找名称逻辑：在 unlockedIngredients 中通过 ID 和染色值寻找匹配
-          let displayName = "染色原料"; 
-          
-          // 查找是否有对应的已解锁原料名
-          const matchedUnlocked = Object.values(unlockedIngredients).find(u => 
-              u.id === layer.id && (u.defaultTint === layer.tintColor)
-          );
-
-          if (matchedUnlocked) {
-              displayName = matchedUnlocked.name;
-          } else if (!layer.tintColor) {
-              // 如果没有染色，直接用原始名
-              displayName = layer.name;
-          }
-
-          // 2. 容器尺寸从 w-20 放大到 w-28 (112px)，甚至可以更大
-          item.className = `flex-shrink-0 w-28 h-28 rounded-2xl border-4 cursor-pointer overflow-hidden relative shadow-md transition-all ${
+        item.className = `flex-shrink-0 w-28 h-28 rounded-2xl border-4 cursor-pointer overflow-hidden relative shadow-md transition-all ${
             isSelected
-              ? "border-[#8B4513] ring-4 ring-[#DEB887]/50 scale-110 z-10"
-              : "border-white opacity-90 hover:opacity-100"
-          }`;
+                ? "border-[#8B4513] ring-4 ring-[#DEB887]/50 scale-110 z-10"
+                : "border-white opacity-90 hover:opacity-100"
+        }`;
 
-          const prevImgId = `prev-img-${layer.uid}-${Math.random().toString(36).substr(2, 4)}`;
+        const prevImgId = `prev-img-${layer.uid}`;
 
-          item.innerHTML = `
+        item.innerHTML = `
             <img id="${prevImgId}" src="${layer.src}" class="w-full h-full object-cover bg-[#fdfbf7]">
             <div class="absolute bottom-0 w-full text-[14px] font-black bg-[#8B4513]/90 text-white text-center truncate px-1 py-1 leading-tight">
-                ${displayName}
+                ${layer.name}
             </div>
         `;
-          
-          item.onclick = () => selectLayer(layer.uid);
-          list.appendChild(item);
 
-          // 3. 应用实时染色和滤镜到预览图
-          setTimeout(() => {
-              const imgEl = document.getElementById(prevImgId);
-              if (imgEl) {
-                  // 应用基础滤镜
-                  imgEl.style.filter = `brightness(${layer.brightness}%) contrast(${layer.contrast}%)`;
-                  imgEl.style.opacity = layer.opacity / 100;
-                  
-                  // 应用染色
-                  if (layer.tintColor) {
-                      applyTintFilter(imgEl, layer.tintColor);
-                  }
-              }
-          }, 0);
-        });
+        item.onclick = () => selectLayer(layer.uid);
+        list.appendChild(item);
 
-        // C. 更新面板
-        updatePanelValues();
-        saveEditorState();
-      }
+        // 异步应用滤镜到列表的小预览图上
+        setTimeout(() => {
+            const imgEl = document.getElementById(prevImgId);
+            if (imgEl) {
+                imgEl.style.filter = `brightness(${layer.brightness}%) contrast(${layer.contrast}%)`;
+                imgEl.style.opacity = layer.opacity / 100;
+                if (layer.tintColor) {
+                    applyTintFilter(imgEl, layer.tintColor);
+                }
+            }
+        }, 0);
+    });
 
+    // 更新右侧/下方的控制面板数值
+    updatePanelValues();
+    // 保存当前状态到本地（防止刷新丢失）
+    saveEditorState();
+}
       // 3. 滤镜与辅助函数 (修改 applyEditorFilters)
       // --- 修复版：编辑器专用滤镜应用函数 ---
       function applyEditorFilters(img, layer) {
@@ -9747,38 +9754,51 @@ function renderThumbnailFromCode(container, code, scale, skipBg = false) {
     if (!container) return;
     container.innerHTML = ""; 
 
+    // 解析配方码
     const layers = parseShortCode(code);
     if (!layers) return;
 
+    // 创建一个缩放包装容器
     const wrapper = document.createElement("div");
-    const bgColor = skipBg ? "transparent" : "#fff";
-    wrapper.style.cssText = `width:650px; height:650px; position:relative; background:${bgColor}; transform: scale(${scale}); transform-origin: top left;`;
+    wrapper.style.cssText = `width:650px; height:650px; position:relative; transform: scale(${scale}); transform-origin: top left;`;
 
+    // --- 【新增：背景绘制逻辑】 ---
     if (skipBg === false && typeof appSettings !== 'undefined' && appSettings.drinkBackground) {
-        const bgImg = document.createElement("img");
-        bgImg.src = `${imgBaseUrl}${appSettings.drinkBackground}.PNG`;
-        bgImg.style.cssText = "position:absolute; left:0; top:0; width:100%; height:100%; object-fit:cover; z-index:0; pointer-events:none;";
-        wrapper.appendChild(bgImg);
+        if (appSettings.drinkBackground.startsWith('#')) {
+            // A. 纯色背景
+            const bgDiv = document.createElement("div");
+            bgDiv.style.cssText = `position:absolute; left:0; top:0; width:100%; height:100%; background:${appSettings.drinkBackground}; z-index:0; pointer-events:none;`;
+            wrapper.appendChild(bgDiv);
+        } else {
+            // B. 图片背景
+            const bgImg = document.createElement("img");
+            bgImg.src = `${imgBaseUrl}${appSettings.drinkBackground}.PNG`;
+            bgImg.style.cssText = "position:absolute; left:0; top:0; width:100%; height:100%; object-fit:cover; z-index:0; pointer-events:none;";
+            wrapper.appendChild(bgImg);
+        }
+    } else if (skipBg === false) {
+        // 如果没选背景也没说要跳过，默认给个白色底，防止透明
+        wrapper.style.background = "#ffffff";
     }
 
+    // 绘制配方中的各个原料层
     layers.sort((a, b) => a.zIndex - b.zIndex).forEach((layer) => {
         const img = document.createElement("img");
         img.src = layer.src;
         img.style.cssText = `position:absolute; left:${layer.x}px; top:${layer.y}px; width:${layer.width * layer.scale}px; height:${layer.height * layer.scale}px; z-index:${layer.zIndex};`;
         
-        // --- 核心修复：1. 透明度使用独立属性 ---
+        // 设置基础滤镜
         img.style.opacity = layer.opacity / 100;
-
-        // --- 核心修复：2. 滤镜初始化 ---
         img.style.filter = `brightness(${layer.brightness}%) contrast(${layer.contrast}%)`;
 
         wrapper.appendChild(img);
 
-        // --- 核心修复：3. 染色 ---
+        // 处理染色
         if (layer.tintColor) {
             setTimeout(() => { applyTintFilter(img, layer.tintColor); }, 0);
         }
     });
+
     container.appendChild(wrapper);
 }
 function openDirectDossier() {
@@ -12282,41 +12302,6 @@ function viewPastMatchResult(matchTitle) {
 }
 
 // 全局设置更新逻辑
-async function updateAppBackground(bgName) {
-    // 1. 更新内存变量
-    if (typeof appSettings === 'undefined') window.appSettings = { drinkBackground: null };
-    appSettings.drinkBackground = bgName;
-
-    // 2. 更新 UI 选中状态
-    document.querySelectorAll('.bg-option-card').forEach(c => c.classList.remove('active'));
-    const targetId = bgName ? `bg-opt-${bgName}` : 'bg-opt-none';
-    const card = document.getElementById(targetId);
-    if (card) card.classList.add('active');
-
-    // 3. 立即刷新当前可见的 UI
-    // 如果研发室开着，刷新研发室预览
-    if (document.getElementById('layer-dev').style.display !== 'none') {
-        updateCanvas();
-    }
-    // 如果店铺终端开着，刷新主推展示和配方列表
-    if (document.getElementById('layer-menu').style.display !== 'none') {
-        updateShowcaseDisplay();
-        refreshRecipeList(); 
-    }
-    if (document.getElementById('layer-result').style.display !== 'none') {
-        renderEditor();
-    }
-    // 4. 持久化保存 (MVU)
-    try {
-        await waitGlobalInitialized("Mvu");
-        const mvuData = Mvu.getMvuData({ type: "message", message_id: TavernHelper.getLastMessageId() });
-        if (!mvuData.stat_data) mvuData.stat_data = {};
-        mvuData.stat_data.appSettings = appSettings; // 保存到存档
-        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: TavernHelper.getLastMessageId() });
-    } catch (e) { console.error("保存设置失败:", e); }
-    
-    console.log("奶茶背景已更新为:", bgName || "无");
-}
 
 // --- 核心功能：删除配方 ---
 async function deleteRecipe(key) {
@@ -13366,33 +13351,7 @@ function updateDifficulty(level) {
     const names = { 'easy': '轻松', 'normal': '标准', 'hard': '硬核' };
     showSysAlert(`⚙️ 评分难度已切换为：${names[level]}`);
 }
-// 统一刷新设置页所有高亮的函数
-function syncSettingsUI() {
-    console.log("正在同步设置界面...");
-    
-    // 1. 背景高亮逻辑
-    const currentBg = appSettings.drinkBackground;
-    const targetBgId = currentBg ? `bg-opt-${currentBg}` : 'bg-opt-none';
-    
-    // 清除所有背景卡片高亮
-    document.querySelectorAll('[id^="bg-opt-"]').forEach(c => c.classList.remove('active'));
-    // 给选中的加高亮
-    const activeBgEl = document.getElementById(targetBgId);
-    if(activeBgEl) activeBgEl.classList.add('active');
 
-    // 2. 难度高亮逻辑 (关键：必须从 localStorage 读取)
-    const currentDiff = localStorage.getItem('milktea_rating_difficulty') || 'normal';
-    console.log("当前读取到的难度:", currentDiff);
-
-    // 清除所有难度卡片高亮
-    document.querySelectorAll('[id^="diff-opt-"]').forEach(c => c.classList.remove('active'));
-    // 给选中的难度卡片加高亮
-    const activeDiffEl = document.getElementById(`diff-opt-${currentDiff}`);
-    if(activeDiffEl) {
-        activeDiffEl.classList.add('active');
-        console.log("已点亮难度卡片:", `diff-opt-${currentDiff}`);
-    }
-}
 // 折叠切换函数
 function toggleSection(containerId, arrowId) {
     const el = document.getElementById(containerId);
@@ -14080,74 +14039,71 @@ function startLoadingState() {
 function runBounceLogic() {
     const loader = document.getElementById("devLoading");
     const ingImg = document.getElementById("loadingIngredient");
-    if (!loader || !ingImg) return;
+    if (!loader || !ingImg || loader.style.display === "none") return;
 
-    // 获取容器当前的实际物理尺寸
-    const containerW = loader.clientWidth;
-    const containerH = loader.clientHeight;
+    const containerW = window.innerWidth;
+    const containerH = window.innerHeight;
 
-    // 速度衰减
+    // 1. 速度衰减
     bounceData.vx *= bounceData.friction;
     bounceData.vy *= bounceData.friction;
 
-    // 停止微小移动
-    if (Math.abs(bounceData.vx) < 0.1) bounceData.vx = 0;
-    if (Math.abs(bounceData.vy) < 0.1) bounceData.vy = 0;
-
-    // 更新坐标
+    // 2. 更新坐标
     bounceData.x += bounceData.vx;
     bounceData.y += bounceData.vy;
 
-    // --- 边界反弹逻辑 (基于容器尺寸) ---
-    
-    // 左右反弹
+    // 3. 边界反弹
     if (bounceData.x <= 0) {
-        bounceData.vx = Math.abs(bounceData.vx);
+        bounceData.vx = Math.abs(bounceData.vx) * 0.8; // 撞墙稍微损耗一点动能
         bounceData.x = 0;
     } else if (bounceData.x + bounceData.w >= containerW) {
-        bounceData.vx = -Math.abs(bounceData.vx);
+        bounceData.vx = -Math.abs(bounceData.vx) * 0.8;
         bounceData.x = containerW - bounceData.w;
     }
 
-    // 上下反弹
     if (bounceData.y <= 0) {
-        bounceData.vy = Math.abs(bounceData.vy);
+        bounceData.vy = Math.abs(bounceData.vy) * 0.8;
         bounceData.y = 0;
     } else if (bounceData.y + bounceData.h >= containerH) {
-        bounceData.vy = -Math.abs(bounceData.vy);
+        bounceData.vy = -Math.abs(bounceData.vy) * 0.8;
         bounceData.y = containerH - bounceData.h;
     }
 
-    // 应用样式
+    // 4. 【核心修复：丝滑旋转】
+    // 旋转增量取决于当前总速度，不再判断是否静止，而是让角度不断累加
+    const speed = Math.sqrt(bounceData.vx ** 2 + bounceData.vy ** 2);
+    if (speed > 0.1) {
+        // 速度越快转得越快，0.5是旋转系数
+        bounceData.rotation += speed * 0.5 * (bounceData.vx > 0 ? 1 : -1);
+    }
+
+    // 应用位置和旋转
     ingImg.style.left = bounceData.x + "px";
     ingImg.style.top = bounceData.y + "px";
-    
-    // 只有在运动时才旋转，静止时不旋转
-    if (Math.abs(bounceData.vx) > 0.1 || Math.abs(bounceData.vy) > 0.1) {
-        ingImg.style.transform = `rotate(${bounceData.x * 0.2}deg)`;
-    } else {
-        ingImg.style.transform = `rotate(0deg)`;
-    }
+    ingImg.style.transform = `rotate(${bounceData.rotation}deg)`;
 }
-// 点击互动：赋予随机的弹跳动力
+
+// 修改点击互动：增加随机性
 function boostIngredient() {
-    // 每次点击给一个 15-25 之间的随机速度
-    const speed = 20 + Math.random() * 10;
-    const angle = Math.random() * Math.PI * 2; // 随机 360 度方向
+    // 每次点击赋予一个更猛的冲力
+    const speed = 25 + Math.random() * 15;
+    const angle = Math.random() * Math.PI * 2;
     
     bounceData.vx = Math.cos(angle) * speed;
     bounceData.vy = Math.sin(angle) * speed;
     
-    // 视觉反馈：点中时瞬间放大缩小
+    // 视觉反馈：点击时除了放大，增加一个亮光感
     const ingImg = document.getElementById("loadingIngredient");
-    ingImg.style.transition = "transform 0.1s";
-    ingImg.style.transform = "scale(1.2)";
+    ingImg.style.transition = "transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.1s";
+    ingImg.style.transform = `rotate(${bounceData.rotation}deg) scale(1.3)`;
+    ingImg.style.filter = "brightness(1.5) drop-shadow(0 0 20px rgba(255,107,129,0.5))";
+    
     setTimeout(() => { 
         ingImg.style.transition = "none";
-        ingImg.style.transform = "scale(1)"; 
-    }, 100);
+        ingImg.style.transform = `rotate(${bounceData.rotation}deg) scale(1)`;
+        ingImg.style.filter = "brightness(1) drop-shadow(0 10px 20px rgba(0,0,0,0.1))";
+    }, 150);
 }
-
 // 停止加载
 function stopLoadingState() {
     const loader = document.getElementById("devLoading");
@@ -14231,6 +14187,69 @@ async function dismissPhoneMatch(matchTitle) {
         renderSimMatchList();
         await saveShopDataToMvu();
     }
+}
+
+
+// 实时预览调色盘颜色
+function updateCustomBgPreview(hexColor) {
+    const prev = document.getElementById("bg-custom-preview");
+    if (prev) prev.style.background = hexColor;
+}
+
+// 全局设置更新逻辑（支持图片与 Hex 颜色）
+async function updateAppBackground(bgValue) {
+    // 1. 记录设置
+    if (typeof appSettings === 'undefined') window.appSettings = { drinkBackground: null };
+    appSettings.drinkBackground = bgValue;
+
+    // 2. 刷新设置页面的高亮（比如给色盘卡片加个红框）
+    syncSettingsUI();
+
+    // 3. 【核心】通知各个渲染引擎重新画图
+    // 此时渲染引擎（比如 updateCanvas）内部会自动去读刚才存的 appSettings.drinkBackground
+    if (document.getElementById('layer-dev').style.display !== 'none') updateCanvas();
+    if (document.getElementById('layer-menu').style.display !== 'none') {
+        updateShowcaseDisplay();
+        refreshRecipeList(); 
+    }
+    if (document.getElementById('layer-result').style.display !== 'none') renderEditor();
+
+    // 4. 保存到云端存档
+    try {
+        await waitGlobalInitialized("Mvu");
+        const mvuData = Mvu.getMvuData({ type: "message", message_id: TavernHelper.getLastMessageId() });
+        if (!mvuData.stat_data) mvuData.stat_data = {};
+        mvuData.stat_data.appSettings = appSettings;
+        await Mvu.replaceMvuData(mvuData, { type: "message", message_id: TavernHelper.getLastMessageId() });
+    } catch (e) { console.error("保存背景设置失败:", e); }
+}
+// 刷新设置页高亮逻辑
+function syncSettingsUI() {
+    const currentBg = appSettings.drinkBackground;
+    
+    // 重置所有背景卡片高亮
+    document.querySelectorAll('[id^="bg-opt-"]').forEach(c => c.classList.remove('active'));
+
+    // 判断是色盘纯色(#)还是图片/无
+    if (currentBg && currentBg.startsWith('#')) {
+        const customCard = document.getElementById('bg-opt-custom');
+        if (customCard) customCard.classList.add('active');
+        
+        const picker = document.getElementById('custom-bg-color-picker');
+        if (picker) picker.value = currentBg;
+        
+        updateCustomBgPreview(currentBg);
+    } else {
+        const targetBgId = currentBg ? `bg-opt-${currentBg}` : 'bg-opt-none';
+        const activeBgEl = document.getElementById(targetBgId);
+        if (activeBgEl) activeBgEl.classList.add('active');
+    }
+
+    // 难度高亮保持
+    const currentDiff = localStorage.getItem('milktea_rating_difficulty') || 'normal';
+    document.querySelectorAll('[id^="diff-opt-"]').forEach(c => c.classList.remove('active'));
+    const activeDiffEl = document.getElementById(`diff-opt-${currentDiff}`);
+    if (activeDiffEl) activeDiffEl.classList.add('active');
 }
 </script>
   </body>
