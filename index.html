@@ -5552,7 +5552,7 @@
           </div>
         </div>
 <!-- 研发加载动画层：固定全屏，超出隐藏 -->
-<div id="devLoading" class="dev-loading-overlay" style="position: fixed; inset: 0; overflow: hidden; background: rgba(253, 251, 247, 1); z-index: 9999; display: none; touch-action: none;">
+<div id="devLoading" class="dev-loading-overlay" style="position: absolute; inset: 0; overflow: hidden; background: rgba(253, 251, 247, 1); z-index: 9999; display: none; touch-action: none;">
     
   <!-- 随机原料弹球：层级为 1，在文字下方 -->
   <img id="loadingIngredient" 
@@ -5942,7 +5942,7 @@ let bounceInterval = null;
 let bounceData = { 
     x: 0, y: 0, 
     vx: 0, vy: 0, 
-    w: 300, h: 300, 
+    w: 360, h: 360, 
     rotation: 0, // 新增：记录当前的旋转角度
     friction: 0.99 // 稍微调高一点摩擦力，让它滑得更久
 };
@@ -13853,84 +13853,52 @@ function confirmBranch(mid, summary) {
 
 
 async function handleRegenerateTurn() {
-    // 1. 防抖检查
     if (isSyncing) return;
     isSyncing = true;
-
-    // 2. 启动加载状态
     startLoadingState();
-    const loadingTextEl = document.querySelector("#devLoading .loading-text");
-    if (loadingTextEl) {
-        loadingTextEl.innerText = "正在干扰时间线，重塑因果...";
-    }
 
     try {
-        // 获取所有历史记录（取最后20条足够了）
         const lastMid = TavernHelper.getLastMessageId();
         const history = TavernHelper.getChatMessages(`0-${lastMid}`);
         
-        if (!history || history.length === 0) throw new Error("无法读取聊天记录");
-
-        // 3. 寻找最后一条 AI 回复 (Assistant)
         let lastAiIdx = -1;
         for (let i = history.length - 1; i >= 0; i--) {
             if (history[i].role === 'assistant') {
-                lastAiIdx = i;
-                break;
+                lastAiIdx = i; break;
             }
         }
 
         if (lastAiIdx === -1) {
-            showSysAlert("❌ 无法重来：当前时间线没有 AI 的回复。");
-            stopLoadingState();
-            return;
+            showSysAlert("无法重roll：未发现AI回复。");
+            stopLoadingState(); return;
         }
 
         const aiMid = history[lastAiIdx].message_id;
-
-        // 4. 从 AI 楼层往回找最近的一条玩家消息 (User)
         let userMsgObj = null;
         for (let i = lastAiIdx - 1; i >= 0; i--) {
             if (history[i].role === 'user') {
-                userMsgObj = history[i];
-                break;
+                userMsgObj = history[i]; break;
             }
         }
 
         if (!userMsgObj) {
-            showSysAlert("❌ 溯源失败：找不到引发此段剧情的店长指令。");
-            stopLoadingState();
-            return;
+            showSysAlert("溯源失败。");
+            stopLoadingState(); return;
         }
 
+        // 暂存数据接力棒
         const originalPrompt = userMsgObj.message;
-        const previousData = userMsgObj.data; // 获取当时的经营数据快照
+        const previousData = userMsgObj.data;
 
-        console.log(`🔄 执行重roll。物理删除楼层: ${aiMid}，溯源指令楼层: ${userMsgObj.message_id}`);
-
-        // 5. 执行物理删除（删除旧的 AI 回复）
+        // 执行删除
         if (typeof window.deleteChatMessages === 'function') {
             await window.deleteChatMessages([aiMid], {});
         }
 
-        // 6. 请求 AI 重新生成
+        // 让AI重新生成
         const aiRawResponse = await TavernHelper.generate({ user_input: originalPrompt });
         
-        if (!aiRawResponse) {
-            showSysAlert("❌ 时空隧道中断：AI 响应为空，请点击同步按钮重试。");
-            stopLoadingState();
-            return;
-        }
-
-        // 7. 解析数据变更 (MVU)
-        let updatedStatData = previousData;
-        if (typeof Mvu?.parseMessage === 'function') {
-            // 传入旧快照进行增量解析
-            const parsedData = await Mvu.parseMessage(aiRawResponse, previousData || { stat_data: {} });
-            if (parsedData) updatedStatData = parsedData;
-        }
-
-        // 8. 解析剧情文本 (dialogtext)
+        // 关键：在创建新楼层前，先解析数据
         const dialogRegex = /<dialogtext>([\s\S]*?)<\/dialogtext>/i;
         const dialogMatch = aiRawResponse.match(dialogRegex);
         let newDialogData = [];
@@ -13939,44 +13907,46 @@ async function handleRegenerateTurn() {
             try {
                 const start = jsonContent.indexOf('[');
                 const end = jsonContent.lastIndexOf(']');
-                if (start !== -1 && end !== -1) {
-                    newDialogData = JSON.parse(jsonContent.substring(start, end + 1));
-                }
-            } catch (e) { console.error("剧情解析失败:", e); }
+                newDialogData = JSON.parse(jsonContent.substring(start, end + 1));
+            } catch (e) {}
         }
 
-        // 9. 创建新的 AI 楼层
+        // 解析 MVU 变更
+        let updatedStatData = previousData;
+        if (typeof Mvu?.parseMessage === 'function') {
+            updatedStatData = await Mvu.parseMessage(aiRawResponse, previousData || { stat_data: {} });
+        }
+
+        // 创建新 AI 楼层
         const newMid = await TavernHelper.createChatMessages(
             [{ role: 'assistant', message: aiRawResponse, data: updatedStatData || void 0 }],
             { refresh: 'none' }
         );
 
-        // 10. 全局状态刷新
+        // 🔥【核心初始化重置】
         window.lastProcessedId = newMid;
-        
-        // 更新本地变量
-        if (newDialogData.length > 0) {
-            dialogData = newDialogData;
-            dialogIndex = -1; // 重置进度
-            isStoryFinished = false; 
-        }
+        dialogData = newDialogData;
+        dialogIndex = -1;       // 重置索引到开头
+        isStoryFinished = false; // 解除同步锁定
 
-        // 强制重新载入 MVU 数据到 UI
+        // 刷新经营数据到本地内存
         await reloadGameData(newMid);
 
-        console.log("✅ 时间回溯成功！新楼层:", newMid);
+        console.log("✅ 时间回溯成功，自动开始播放剧情");
         
-        // 自动开始播放第一句
-        nextDialog();
+        // 🔥 强制触发第一次剧情显示
+        nextDialog(); 
 
     } catch (e) {
-        console.error("❌ 重roll致命错误:", e);
-        showSysAlert("系统异常：时间流向发生了严重紊乱。");
+        console.error(e);
+        showSysAlert("重roll过程中发生异常。");
     } finally {
         stopLoadingState();
         isSyncing = false;
     }
 }
+
+
 // 修改：Tips 轮换逻辑（增加初始显示）
 function startTipRotation() {
     const tipText = document.getElementById("loadingTipText");
@@ -13995,34 +13965,37 @@ function startTipRotation() {
     }, 3000); 
 }
 
+
+
 function startLoadingState() {
     const loader = document.getElementById("devLoading");
     const ingImg = document.getElementById("loadingIngredient");
     if (!loader || !ingImg) return;
 
     loader.style.display = "flex";
-    responseSeconds = 0;
-    document.getElementById("responseTimer").innerText = "已响应: 0秒";
+    
+    // 强制刷新一次布局，确保拿到正确的 clientHeight (应该是 1312)
+    const containerW = loader.clientWidth || 736;
+    const containerH = loader.clientHeight || 1312;
 
-    // 1. 随机挑选一个原料图片
+    // 2. 随机原料
     const validIngs = ingredientsDB.filter(i => !i.isFixed);
     const randomIng = validIngs[Math.floor(Math.random() * validIngs.length)];
     ingImg.src = `${imgBaseUrl}${randomIng.baseImageName || randomIng.name}.PNG`;
 
-    // 2. 初始化位置：屏幕正中心（原 emoji 位置）
-    bounceData.x = window.innerWidth / 2 - bounceData.w / 2;
-    bounceData.y = window.innerHeight / 2 - bounceData.h / 2;
+    // 3. 初始位置：彻底居中 (736/2 - 360/2, 1312/2 - 360/2)
+    bounceData.x = containerW / 2 - bounceData.w / 2;
+    bounceData.y = containerH / 2 - bounceData.h / 2;
     
-    // 3. 初始速度设为 0（不动）
-    bounceData.vx = 0;
-    bounceData.vy = 0;
+    bounceData.vx = (Math.random() - 0.5) * 10; // 给个初始微小速度，防止完全不动
+    bounceData.vy = (Math.random() - 0.5) * 10;
 
-    // 应用初始位置样式
     ingImg.style.left = bounceData.x + "px";
     ingImg.style.top = bounceData.y + "px";
-    ingImg.style.transform = "scale(1)";
 
-    // 4. 启动 Tips 轮换和计时
+    // 启动计时器
+    responseSeconds = 0;
+    document.getElementById("responseTimer").innerText = `已响应: 0秒`;
     startTipRotation();
     if (loadingTimerInterval) clearInterval(loadingTimerInterval);
     loadingTimerInterval = setInterval(() => {
@@ -14030,59 +14003,54 @@ function startLoadingState() {
         document.getElementById("responseTimer").innerText = `已响应: ${responseSeconds}秒`;
     }, 1000);
 
-    // 5. 启动物理循环 (60FPS)
     if (bounceInterval) clearInterval(bounceInterval);
     bounceInterval = setInterval(runBounceLogic, 16);
 }
 
-// 物理碰撞与衰减逻辑
 function runBounceLogic() {
     const loader = document.getElementById("devLoading");
     const ingImg = document.getElementById("loadingIngredient");
     if (!loader || !ingImg || loader.style.display === "none") return;
 
-    const containerW = window.innerWidth;
-    const containerH = window.innerHeight;
+    // 关键：获取实时容器尺寸
+    const containerW = loader.clientWidth || 736;
+    const containerH = loader.clientHeight || 1312;
 
-    // 1. 速度衰减
     bounceData.vx *= bounceData.friction;
     bounceData.vy *= bounceData.friction;
-
-    // 2. 更新坐标
     bounceData.x += bounceData.vx;
     bounceData.y += bounceData.vy;
 
-    // 3. 边界反弹
+    // --- 边界检查 ---
+    // 左右反弹
     if (bounceData.x <= 0) {
-        bounceData.vx = Math.abs(bounceData.vx) * 0.8; // 撞墙稍微损耗一点动能
+        bounceData.vx = Math.abs(bounceData.vx) * 0.8;
         bounceData.x = 0;
     } else if (bounceData.x + bounceData.w >= containerW) {
         bounceData.vx = -Math.abs(bounceData.vx) * 0.8;
         bounceData.x = containerW - bounceData.w;
     }
 
+    // 上下反弹
     if (bounceData.y <= 0) {
         bounceData.vy = Math.abs(bounceData.vy) * 0.8;
         bounceData.y = 0;
     } else if (bounceData.y + bounceData.h >= containerH) {
+        // 🔥 如果之前只在上面弹，说明这里的 containerH 之前拿错了
         bounceData.vy = -Math.abs(bounceData.vy) * 0.8;
         bounceData.y = containerH - bounceData.h;
     }
 
-    // 4. 【核心修复：丝滑旋转】
-    // 旋转增量取决于当前总速度，不再判断是否静止，而是让角度不断累加
+    // 旋转逻辑（保持丝滑）
     const speed = Math.sqrt(bounceData.vx ** 2 + bounceData.vy ** 2);
     if (speed > 0.1) {
-        // 速度越快转得越快，0.5是旋转系数
         bounceData.rotation += speed * 0.5 * (bounceData.vx > 0 ? 1 : -1);
     }
 
-    // 应用位置和旋转
     ingImg.style.left = bounceData.x + "px";
     ingImg.style.top = bounceData.y + "px";
     ingImg.style.transform = `rotate(${bounceData.rotation}deg)`;
 }
-
 // 修改点击互动：增加随机性
 function boostIngredient() {
     // 每次点击赋予一个更猛的冲力
