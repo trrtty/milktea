@@ -8154,30 +8154,35 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
  function parseDialogTextFromRaw(rawText) {
     if (!rawText) return [];
     
-    // 全局匹配标签
+    // 1. 全局匹配所有的 <dialogtext> 标签，防止被免责声明干扰
     const regex = /<dialogtext>([\s\S]*?)<\/dialogtext>/gi;
     const matches = Array.from(rawText.matchAll(regex));
     
     if (matches.length === 0) return [];
 
-    // 取最后一对标签，清理注释
+    // 2. 取最后一个标签块（通常是最新的剧情）
     let rawContent = matches[matches.length - 1][1].trim();
+    
+    // 3. 深度清理：彻底剔除 <!-- --> 及其内部所有内容
     rawContent = rawContent.replace(/<!--[\s\S]*?-->/g, "");
     
-    // 定位并解析 JSON
+    // 4. 定位 JSON 数组边界
     const start = rawContent.indexOf('[');
     const end = rawContent.lastIndexOf(']');
     
     if (start !== -1 && end !== -1) {
         try {
-            return JSON.parse(rawContent.substring(start, end + 1));
+            const jsonStr = rawContent.substring(start, end + 1);
+            // 【关键】使用 new Function 替代 JSON.parse
+            // 它能完美处理末尾多出的逗号、换行符以及 AI 偶尔乱入的非标准字符
+            return new Function(`return ${jsonStr}`)();
         } catch (e) {
+            console.error("❌ 剧情 JSON 解析失败，原始文本:", rawContent);
             return [];
         }
     }
     return [];
 }
-
 async function syncLatestContent() {
     try {
         // 1. 获取全量 Assistant 消息，取最后 5 条进行扫描
