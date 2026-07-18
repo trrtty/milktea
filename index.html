@@ -4662,47 +4662,30 @@
               class="absolute inset-0 bg-[#F5F5F0] transform translate-x-full transition-transform duration-300 flex flex-col z-30"
             >
               <!-- 顶部筛选栏 -->
-              <div
-                class="h-24 bg-white border-b border-gray-200 flex items-center px-6 flex-shrink-0 gap-4 overflow-x-auto shadow-sm"
-              >
-                <button
-                  class="text-[#585858] font-bold text-lg flex items-center gap-1 hover:bg-gray-100 px-3 py-2 rounded-lg transition mr-4"
-                  onclick="switchMenuLevel(1)"
-                >
-                  ❮ 返回
+              <div class="h-24 bg-white border-b border-gray-100 flex items-center px-6 flex-shrink-0 gap-3 overflow-x-auto shadow-sm">
+                <!-- 返回按钮 -->
+                <button class="text-[#8B4513] font-bold text-lg flex items-center gap-1 hover:bg-orange-50 px-3 py-2 rounded-xl transition mr-2" onclick="switchMenuLevel(1)">
+                    ❮ 返回
                 </button>
-
-                <button
-                  class="stock-filter active px-5 py-2 rounded-full bg-[#8B4513] text-white font-bold text-base shadow-sm transition-all hover:scale-105"
-                  onclick="filterStock('all', this)"
-                >
-                  全部
-                </button>
-                <button
-                  class="stock-filter px-5 py-2 rounded-full bg-gray-100 text-gray-600 font-bold text-base hover:bg-gray-200 transition-all"
-                  onclick="filterStock('base', this)"
-                >
-                  茶底/液体
-                </button>
-                <button
-                  class="stock-filter px-5 py-2 rounded-full bg-gray-100 text-gray-600 font-bold text-base hover:bg-gray-200 transition-all"
-                  onclick="filterStock('topping', this)"
-                >
-                  小料/装饰
-                </button>
-                <button
-                  class="stock-filter px-5 py-2 rounded-full bg-[#FFE4C4] text-[#D2691E] font-bold text-base hover:bg-[#FFDAB9] transition-all"
-                  onclick="filterStock('season-summer', this)"
-                >
-                  ☀️ 夏日
-                </button>
-                <button
-                  class="stock-filter px-5 py-2 rounded-full bg-[#E0F7FA] text-[#006064] font-bold text-base hover:bg-[#B2EBF2] transition-all"
-                  onclick="filterStock('season-winter', this)"
-                >
-                  ❄️ 冬日
-                </button>
-              </div>
+            
+                <!-- 分组 1: 类别 (使用深色/灰色系) -->
+                <div class="flex bg-gray-100 p-1 rounded-full gap-1">
+                    <button class="stock-filter active px-5 py-2 rounded-full bg-[#8B4513] text-white font-bold text-sm transition-all" onclick="filterStock('all', this)">全部</button>
+                    <button class="stock-filter px-5 py-2 rounded-full text-gray-500 font-bold text-sm hover:bg-white transition-all" onclick="filterStock('base', this)">基底</button>
+                    <button class="stock-filter px-5 py-2 rounded-full text-gray-500 font-bold text-sm hover:bg-white transition-all" onclick="filterStock('topping', this)">小料</button>
+                </div>
+            
+                <!-- 分割线 -->
+                <div class="h-8 w-[1px] bg-gray-200 mx-1"></div>
+            
+                <!-- 分组 2: 季节 (使用莫兰迪色系，精简文字) -->
+                <div class="flex gap-2">
+                    <button class="stock-filter px-4 py-2 rounded-full bg-[#F3E5F5] text-[#7B1FA2] font-bold text-sm border border-[#E1BEE7]" onclick="filterStock('season-spring', this)">🌸 春</button>
+                    <button class="stock-filter px-4 py-2 rounded-full bg-[#FFF9C4] text-[#FBC02D] font-bold text-sm border border-[#FFF9C4]" onclick="filterStock('season-summer', this)">☀️ 夏</button>
+                    <button class="stock-filter px-4 py-2 rounded-full bg-[#EFEBE9] text-[#5D4037] font-bold text-sm border border-[#D7CCC8]" onclick="filterStock('season-autumn', this)">🍂 秋</button>
+                    <button class="stock-filter px-4 py-2 rounded-full bg-[#E1F5FE] text-[#0288D1] font-bold text-sm border border-[#B3E5FC]" onclick="filterStock('season-winter', this)">❄️ 冬</button>
+                </div>
+            </div>
 
               <!-- 原料列表容器 -->
               <div
@@ -5553,23 +5536,26 @@
             </div>
           </div>
         </div>
-        <div id="devLoading" class="dev-loading-overlay" style="position: fixed; inset: 0; overflow: hidden; touch-action: none; background: rgba(253, 251, 247, 1); z-index: 9999;">
-          <!-- 随机原料：z-index 设为 1，确保在最底层 -->
-          <img id="loadingIngredient" 
-               src="" 
-               style="position: absolute; width: 360px; height: 360px; cursor: pointer; z-index: 1; object-fit: contain; user-select: none; transition: transform 0.1s;"
-               onclick="boostIngredient()" />
+<!-- 研发加载动画层：固定全屏，超出隐藏 -->
+<div id="devLoading" class="dev-loading-overlay" style="position: fixed; inset: 0; width: 100vw; height: 100vh; overflow: hidden; background: rgba(253, 251, 247, 1); z-index: 9999; display: none; touch-action: none;">
+    
+  <!-- 随机原料弹球：层级为 1，在文字下方 -->
+  <img id="loadingIngredient" 
+       src="" 
+       style="position: absolute; width: 360px; height: 360px; cursor: pointer; z-index: 1; object-fit: contain; user-select: none; pointer-events: auto;"
+       onclick="boostIngredient()" />
+
+  <!-- 文本内容层：层级为 10，在球上方，pointer-events: none 让点击穿透到球上 -->
+  <div style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; pointer-events: none;">
+      <div class="loading-text" style="font-size: 32px; color: #8b4513; font-weight: 900; text-shadow: 0 2px 10px rgba(255,255,255,0.8);">正在同步店长决策...</div>
+      <div id="responseTimer" style="margin-top: 15px; color: #ff6b81; font-weight: bold; font-size: 24px;">已响应: 0秒</div>
       
-          <!-- 文本内容：z-index 设为 5，浮在球上面 -->
-          <div style="position: relative; z-index: 5; text-align: center; pointer-events: none;">
-              <div class="loading-text" style="margin-top: 300px; font-size: 28px; color: #8b4513; font-weight: 900;">正在同步店长决策...</div>
-              <div id="responseTimer" style="margin-top: 15px; color: #ff6b81; font-weight: bold; font-size: 22px;">已响应: 0秒</div>
-              <div class="loading-tips-wrap" style="margin-top: 50px;">
-                  <div class="tip-label">小贴士 Tips</div>
-                  <div id="loadingTipText" style="pointer-events: auto;">正在加载小贴士...</div>
-              </div>
-          </div>
+      <div class="loading-tips-wrap" style="margin-top: 80px; width: 80%; pointer-events: auto;">
+          <div class="tip-label" style="font-size: 16px; opacity: 0.6;">小贴士 Tips</div>
+          <div id="loadingTipText" style="font-size: 20px; line-height: 1.5; color: #8b4513;">正在加载店长秘籍...</div>
       </div>
+  </div>
+</div>
         <!-- 4. 改良后的成品精修界面 (layer-result) - 纯净版 -->
         <div
           id="layer-result"
@@ -7990,7 +7976,13 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
         document.getElementById("infoCost").innerText = item.cost;
 
         // 3. 填充季节 (图标 + 文字)
-        const seasonMap = { 夏: "☀️", 冬: "❄️", 全: "⭐" };
+        const seasonMap = { 
+        "春": "🌸", 
+        "夏": "☀️", 
+        "秋": "🍂", 
+        "冬": "❄️", 
+        "全": "⭐" 
+    };
         const seasonEmoji = seasonMap[item.season] || "❓";
         // 这里我们只显示图标，或者你可以改成 seasonEmoji + item.season
         document.getElementById("infoSeason").innerText = seasonEmoji;
@@ -9241,10 +9233,11 @@ container.style.paddingBottom = "150px";
           if (filterType === "all") return true;
           if (filterType === "base") return item.type === "base";
           if (filterType === "topping") return item.type === "topping";
-          if (filterType === "season-summer")
-            return item.season === "夏" || item.season === "全";
-          if (filterType === "season-winter")
-            return item.season === "冬" || item.season === "全";
+       // --- 【修改这里：增加春/秋过滤逻辑】 ---
+       if (filterType === "season-spring") return item.season === "春" || item.season === "全";
+        if (filterType === "season-summer") return item.season === "夏" || item.season === "全";
+        if (filterType === "season-autumn") return item.season === "秋" || item.season === "全";
+        if (filterType === "season-winter") return item.season === "冬" || item.season === "全";
           return true;
         });
 
@@ -9332,33 +9325,35 @@ container.style.paddingBottom = "150px";
         if (tagName.includes("绵")) return "#BC8F8F"; // 玫瑰褐
         return "#949F9F"; // 默认莫兰迪灰
       }
-
-      // 3. 筛选按钮点击样式
       function filterStock(type, btn) {
-        // 移除所有 active 样式
-        document.querySelectorAll(".stock-filter").forEach((b) => {
-          // 恢复默认态
-          if (b.innerHTML.includes("夏")) {
-            b.className =
-              "stock-filter px-5 py-2 rounded-full bg-[#FFE4C4] text-[#D2691E] font-bold text-base hover:bg-[#FFDAB9] transition-all";
-          } else if (b.innerHTML.includes("冬")) {
-            b.className =
-              "stock-filter px-5 py-2 rounded-full bg-[#E0F7FA] text-[#006064] font-bold text-base hover:bg-[#B2EBF2] transition-all";
-          } else {
-            b.className =
-              "stock-filter px-5 py-2 rounded-full bg-gray-100 text-gray-600 font-bold text-base hover:bg-gray-200 transition-all";
-          }
-        });
+    // 1. 彻底重置所有按钮样式到“未激活”状态
+    document.querySelectorAll(".stock-filter").forEach((b) => {
+        // 先移除激活类
+        b.classList.remove("active", "bg-[#8B4513]", "text-white");
+        
+        // 恢复默认的文字颜色（根据内容判断是分类还是季节）
+        if (b.innerText.includes("春")) {
+            b.className = "stock-filter px-4 py-2 rounded-full bg-[#F3E5F5] text-[#7B1FA2] font-bold text-sm border border-[#E1BEE7]";
+        } else if (b.innerText.includes("夏")) {
+            b.className = "stock-filter px-4 py-2 rounded-full bg-[#FFF9C4] text-[#FBC02D] font-bold text-sm border border-[#FFF9C4]";
+        } else if (b.innerText.includes("秋")) {
+            b.className = "stock-filter px-4 py-2 rounded-full bg-[#EFEBE9] text-[#5D4037] font-bold text-sm border border-[#D7CCC8]";
+        } else if (b.innerText.includes("冬")) {
+            b.className = "stock-filter px-4 py-2 rounded-full bg-[#E1F5FE] text-[#0288D1] font-bold text-sm border border-[#B3E5FC]";
+        } else {
+            // “全部/基底/小料” 恢复普通灰
+            b.className = "stock-filter px-5 py-2 rounded-full text-gray-500 font-bold text-sm hover:bg-white transition-all";
+        }
+    });
 
-        // 激活当前按钮 (深色高亮)
-        btn.className =
-          "stock-filter active px-5 py-2 rounded-full bg-[#8B4513] text-white font-bold text-base shadow-lg scale-105 transition-all";
+    // 2. 将当前点击的按钮设为“高亮态” (统一使用店长深棕色)
+    btn.className = "stock-filter active px-5 py-2 rounded-full bg-[#8B4513] text-white font-bold text-sm shadow-md scale-105 transition-all";
 
-        renderMaterialStock(type);
-      }
-      /* --- 奶茶评分系统 (核心算法) --- */
-      /* --- 奶茶评分系统 (核心算法 - 高标准版) --- */
-      function calculateRating(items) {
+    // 3. 执行过滤逻辑
+    renderMaterialStock(type);
+}
+
+function calculateRating(items) {
         let sumStars = 0;
         let sumA = 0;
         let sumB = 0;
@@ -9440,7 +9435,11 @@ container.style.paddingBottom = "150px";
  */
  function applyTintFilter(imgEl, hexColor) {
     if (!hexColor || !imgEl) return;
-
+    let finalColor = hexColor.trim();
+    // 如果不以 # 开头，且符合 3 位或 6 位 16 进制特征，自动补上
+    if (!finalColor.startsWith('#') && /^[0-9A-Fa-f]{3,6}$/.test(finalColor)) {
+        finalColor = '#' + finalColor;
+    }
     // --- 1. 垃圾回收：物理删除该图片之前的旧滤镜节点 ---
     // 我们通过自定义属性 data-active-filter 记录正在使用的滤镜 ID
     const oldFilterId = imgEl.getAttribute('data-active-filter');
@@ -9481,7 +9480,7 @@ container.style.paddingBottom = "150px";
 
     // 步骤 2: 颜色注入
     const feFlood = document.createElementNS(svgNS, "feFlood");
-    feFlood.setAttribute("flood-color", hexColor);
+    feFlood.setAttribute("flood-color", finalColor); 
     feFlood.setAttribute("result", "colorBlock");
 
     const feComposite = document.createElementNS(svgNS, "feComposite");
@@ -10888,7 +10887,7 @@ function renderSimMatchList() {
         Object.entries(phoneMatchDB).forEach(([title, match]) => {
           const card = document.createElement("div");
           card.className = "match-card";
-
+          const diffStars = "★".repeat(Math.floor(match.difficulty || 0)) + "☆".repeat(5 - Math.floor(match.difficulty || 0));
           // 评委渲染逻辑（保持不变）
           let judgesHTML = match.judges
             .map((judgeId) => {
@@ -10909,6 +10908,12 @@ function renderSimMatchList() {
    
             <h3 class="match-title">${title}</h3>
             
+
+                        <!-- 【新增：报名费与难度】 -->
+            <div style="display:flex; gap:20px; margin: 10px 0; font-size:18px; font-weight:bold;">
+                <span style="color:#d2691e;">💰 报名费：¥${match.fee || 0}</span>
+                <span style="color:#ff9f43;">🔥 挑战难度：${diffStars}</span>
+            </div>
             <p style="font-size:22px; color:#888; margin-top:8px; font-style:italic; line-height:1.4;">“${match.desc}”</p>
             
             <div style="margin-top:30px; margin-bottom:10px; font-weight:900; color:#8B4513; font-size:22px;">本场评审团：</div>
@@ -10938,24 +10943,54 @@ function renderSimMatchList() {
       let isParticipatingMatch = false; // 是否处于比赛提交模式
       let currentMatchId = null;
 
-      function goSubmitMatch(matchTitle) {
-        // 【修改点】现在直接通过键名从对象里取数据
-        const match = phoneMatchDB[matchTitle];
-        if (!match) return;
+      async function goSubmitMatch(matchTitle) {
+    const match = phoneMatchDB[matchTitle];
+    if (!match) return;
 
-        isParticipatingMatch = true;
-        currentMatchId = matchTitle; // 暂存名字作为ID
-        isSubmittingTask = true;
-        selectedTaskDrinkKey = null;
+    const fee = match.fee || 0;
 
-        closeLayer("layer-phone");
-        openLayer("layer-menu");
-        switchMenuLevel(2);
+    // 1. 资金检查
+    if (shopFinancials.currentBalance < fee) {
+        showSysAlert(`资金不足！参加这场比赛需要 ¥${fee}，再去卖几杯奶茶攒钱吧。`);
+        return;
+    }
 
+    // 2. 执行扣费与账单记录
+    if (fee > 0) {
+        shopFinancials.currentBalance -= fee;
+        
+        // 生成时间戳：2026年-春-白天
+        const timeStamp = `${worldConfig.year}年-${worldConfig.season}-${worldConfig.time}`;
+        
+        // 记入财务记录
+        shopFinancials.records.unshift({
+            date: timeStamp,
+            item: `比赛报名：${matchTitle}`,
+            amount: -fee,
+            type: "expense"
+        });
 
-      }
-      // 渲染点评列表
-      // 渲染大众点评排行榜
+        // 同步 UI 上的金钱显示
+        syncGlobalBalance();
+        console.log(`💸 已支付比赛报名费: ¥${fee}`);
+    }
+
+    // 3. 标记进入提交模式
+    isParticipatingMatch = true;
+    currentMatchId = matchTitle; 
+    isSubmittingTask = true;
+    selectedTaskDrinkKey = null;
+
+    // 4. 界面跳转
+    closeLayer("layer-phone");
+    openLayer("layer-menu");
+    switchMenuLevel(2); 
+
+    showSysAlert(`🏆 报名成功！已扣除报名费 ¥${fee}。\n请在配方库中选择参赛饮品。`);
+    
+    // 5. 将更新后的资金状态同步到云端
+    await saveShopDataToMvu();
+}
       function renderSimReviewList() {
     const listContainer = document.getElementById("sim-review-list");
     const myStickyContainer = document.getElementById("my-shop-entry");
@@ -11873,7 +11908,12 @@ function showDrinkPopup(drink) {
 // 新增：解锁新原料并存入持久化存储
 async function unlockNewIngredient(ingredientData) {
     if (!ingredientData || !ingredientData.id) return;
-
+    if (ingredientData.defaultTint) {
+        let tint = ingredientData.defaultTint.trim();
+        if (!tint.startsWith('#') && /^[0-9A-Fa-f]{3,6}$/.test(tint)) {
+            ingredientData.defaultTint = '#' + tint;
+        }
+    }
     // 更新内存变量
     unlockedIngredients[ingredientData.id] = ingredientData;
 
@@ -14113,6 +14153,8 @@ function stopLoadingState() {
 
     // 8. 简单的交互反馈
     console.log(`🎲 随机灵感：选取了 ${actualCount} 种原料组合。`);
+
+
 }
 </script>
   </body>
