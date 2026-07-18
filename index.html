@@ -13936,8 +13936,11 @@ async function handleRegenerateTurn() {
 
         console.log("✅ 时间回溯成功，自动开始播放剧情");
         
-        // 🔥 强制触发第一次剧情显示
-        nextDialog(); 
+        if (appSettings.pendingScenes && appSettings.pendingScenes.length > 0) {
+            await processSceneQueue(); // 发现有精修界面，立刻弹出
+        } else {
+            nextDialog(); // 没活干，正常播剧情
+        }
 
     } catch (e) {
         console.error(e);
