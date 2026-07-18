@@ -5537,7 +5537,7 @@
           </div>
         </div>
 <!-- 研发加载动画层：固定全屏，超出隐藏 -->
-<div id="devLoading" class="dev-loading-overlay" style="position: fixed; inset: 0; width: 100vw; height: 100vh; overflow: hidden; background: rgba(253, 251, 247, 1); z-index: 9999; display: none; touch-action: none;">
+<div id="devLoading" class="dev-loading-overlay" style="position: fixed; inset: 0; overflow: hidden; background: rgba(253, 251, 247, 1); z-index: 9999; display: none; touch-action: none;">
     
   <!-- 随机原料弹球：层级为 1，在文字下方 -->
   <img id="loadingIngredient" 
@@ -14040,43 +14040,57 @@ function startLoadingState() {
 
 // 物理碰撞与衰减逻辑
 function runBounceLogic() {
+    const loader = document.getElementById("devLoading");
     const ingImg = document.getElementById("loadingIngredient");
-    if (!ingImg) return;
+    if (!loader || !ingImg) return;
 
-    // 如果速度极小，则停止计算以节省性能
-    if (Math.abs(bounceData.vx) < 0.1 && Math.abs(bounceData.vy) < 0.1) {
-        bounceData.vx = 0;
-        bounceData.vy = 0;
-        return; 
-    }
+    // 获取容器当前的实际物理尺寸
+    const containerW = loader.clientWidth;
+    const containerH = loader.clientHeight;
 
-    // 更新位置
-    bounceData.x += bounceData.vx;
-    bounceData.y += bounceData.vy;
-
-    // 速度衰减（模拟摩擦力）
+    // 速度衰减
     bounceData.vx *= bounceData.friction;
     bounceData.vy *= bounceData.friction;
 
-    // 边界反弹：左右
-    if (bounceData.x <= 0 || bounceData.x + bounceData.w >= window.innerWidth) {
-        bounceData.vx *= -1; // 撞墙反弹
-        bounceData.x = bounceData.x <= 0 ? 0 : window.innerWidth - bounceData.w;
-    }
-    // 边界反弹：上下
-    if (bounceData.y <= 0 || bounceData.y + bounceData.h >= window.innerHeight) {
-        bounceData.vy *= -1; // 撞墙反弹
-        bounceData.y = bounceData.y <= 0 ? 0 : window.innerHeight - bounceData.h;
+    // 停止微小移动
+    if (Math.abs(bounceData.vx) < 0.1) bounceData.vx = 0;
+    if (Math.abs(bounceData.vy) < 0.1) bounceData.vy = 0;
+
+    // 更新坐标
+    bounceData.x += bounceData.vx;
+    bounceData.y += bounceData.vy;
+
+    // --- 边界反弹逻辑 (基于容器尺寸) ---
+    
+    // 左右反弹
+    if (bounceData.x <= 0) {
+        bounceData.vx = Math.abs(bounceData.vx);
+        bounceData.x = 0;
+    } else if (bounceData.x + bounceData.w >= containerW) {
+        bounceData.vx = -Math.abs(bounceData.vx);
+        bounceData.x = containerW - bounceData.w;
     }
 
-    // 渲染位置
+    // 上下反弹
+    if (bounceData.y <= 0) {
+        bounceData.vy = Math.abs(bounceData.vy);
+        bounceData.y = 0;
+    } else if (bounceData.y + bounceData.h >= containerH) {
+        bounceData.vy = -Math.abs(bounceData.vy);
+        bounceData.y = containerH - bounceData.h;
+    }
+
+    // 应用样式
     ingImg.style.left = bounceData.x + "px";
     ingImg.style.top = bounceData.y + "px";
     
-    // 根据速度稍微增加一点旋转感
-    ingImg.style.transform = `rotate(${bounceData.x * 0.1}deg)`;
+    // 只有在运动时才旋转，静止时不旋转
+    if (Math.abs(bounceData.vx) > 0.1 || Math.abs(bounceData.vy) > 0.1) {
+        ingImg.style.transform = `rotate(${bounceData.x * 0.2}deg)`;
+    } else {
+        ingImg.style.transform = `rotate(0deg)`;
+    }
 }
-
 // 点击互动：赋予随机的弹跳动力
 function boostIngredient() {
     // 每次点击给一个 15-25 之间的随机速度
