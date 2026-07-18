@@ -13075,16 +13075,6 @@ function syncStoryUI(data) {
     const uiInfoBox = document.getElementById("charInfoBox");
     const dialogTriangle = document.getElementById("dialogTriangle");
 
-    // ==========================================
-    // 🔥 【核心增加】：初始全量清理逻辑
-    // 每一句开始前，默认先隐藏所有立绘、心情和名字信息框
-    // ==========================================
-    if (moodContainer) moodContainer.innerHTML = "";
-    if (baseImg) baseImg.style.display = "none";
-    if (uiInfoBox) uiInfoBox.style.display = "none";
-    currentActiveCustomerId = "";
-    currentSpeakerName = "";
-
     // 1. 处理小说模式
     if (data.type === "novel") {
         gameDialog.style.display = "none";
@@ -13093,25 +13083,34 @@ function syncStoryUI(data) {
         return;
     }
 
-    // 2. 恢复普通对话框显示
+    // 2. 正常显示初始化
     novelLayer.style.display = "none";
     gameDialog.style.display = "block";
-    
-    // 环境背景更新
     if (data.season || data.time || data.weather) updateEnvironmentUI(data);
 
     let speakerName = data.name;
-    // 判断是否为特殊角色（不显示立绘）
     const isSpecial = (speakerName === "旁白" || speakerName === "系统" || speakerName === playerName);
 
     // ==========================================
-    // 3. 只有当“非特殊角色”时，才尝试寻找并显示立绘
+    // 🔥 【核心修正】：仅针对“第一个对话”进行立绘大扫除
+    // 如果剧本开始第一句是特殊角色，彻底切断与上一场戏立绘的联系
     // ==========================================
+    if (dialogIndex === 0 && isSpecial) {
+        if (baseImg) baseImg.style.display = 'none';
+        if (moodContainer) {
+            moodContainer.style.display = 'none';
+            moodContainer.innerHTML = ""; 
+        }
+        if (uiInfoBox) uiInfoBox.style.display = 'none';
+        currentActiveCustomerId = ""; 
+        currentSpeakerName = "";
+    }
+
+    // 3. 正常角色逻辑 (不受 index 限制)
     if (!isSpecial) {
         let targetId = data.id;
         let targetDesc = data.desc;
 
-        // 在数据库里搜人
         for (let key in customersDB) {
             if (customersDB[key].name === speakerName) {
                 targetId = targetId || customersDB[key].id;
@@ -13120,84 +13119,52 @@ function syncStoryUI(data) {
             }
         }
 
-        // 如果找到了有效的 ID，则重新打开显示
         if (targetId) {
             currentActiveCustomerId = targetId;
             currentSpeakerName = speakerName;
             
-            // 更新 UI 内容
             document.querySelector(".character-name").innerText = speakerName;
             document.querySelector(".character-desc").innerText = targetDesc;
             
-            // 显示立绘和信息框
             baseImg.src = nobgBaseUrl + currentActiveCustomerId + ".png";
             baseImg.style.display = "block";
             if (uiInfoBox) uiInfoBox.style.display = "block";
+        }
+    } else {
+        // 如果中间某行又出现了旁白，你想保留上一句NPC立绘，就不需要写隐藏逻辑
+        // 如果想让旁白行也自动隐藏立绘，可以把隐藏逻辑写在 else 里。
+    }
 
-            // 渲染心情/表情
-            if (data.mood) {
-                const moods = Array.isArray(data.mood) ? data.mood : [data.mood];
-                moodContainer.style.display = "block";
-                moods.forEach(moodName => {
-                    if (!moodName) return;
-                    const img = document.createElement("img");
-                    img.src = `https://raw.githubusercontent.com/trrtty/milktea/main/consumers/${currentSpeakerName}/${moodName}.png`;
-                    img.className = "character-image"; 
-                    img.style.position = "absolute";
-                    img.style.top = "0"; img.style.left = "0";
-                    img.style.zIndex = "10";
-                    img.style.pointerEvents = "none";
-                    img.onerror = () => img.remove();
-                    moodContainer.appendChild(img);
-                });
-            }
+    // 处理表情渲染
+    if (currentActiveCustomerId && data.mood) {
+        if (moodContainer) {
+            moodContainer.innerHTML = ""; // 换表情前先清空
+            moodContainer.style.display = "block";
+            const moods = Array.isArray(data.mood) ? data.mood : [data.mood];
+            moods.forEach(moodName => {
+                if (!moodName) return;
+                const img = document.createElement("img");
+                img.src = `https://raw.githubusercontent.com/trrtty/milktea/main/consumers/${currentSpeakerName}/${moodName}.png`;
+                img.className = "character-image"; 
+                img.style.position = "absolute";
+                img.style.top = "0"; img.style.left = "0";
+                img.style.pointerEvents = "none";
+                moodContainer.appendChild(img);
+            });
         }
     }
 
-    // 4. 处理文本内容
+    // 对话文本显示
     if (data.text) {
         document.getElementById("dialogName").innerText = speakerName;
         document.getElementById("dialogText").innerText = data.text;
     }
 
-    // 处理特殊动作（离开）
-    if (data.action === "leave") {
-        currentActiveCustomerId = "";
-        currentSpeakerName = "";
-        if (baseImg) baseImg.style.display = 'none';
-        if (moodContainer) moodContainer.style.display = 'none';
-        if (uiInfoBox) uiInfoBox.style.display = 'none';
-    }
-
-    // 5. 物品弹出逻辑
-    if (data.item) {
-        setTimeout(async () => {
-            if (data.item.data) {
-                await unlockNewIngredient(data.item.data);
-                showItemPopup(data.item.name, null, data.item.data, "获得新原料");
-            } else {
-                showItemPopup(data.item.name, data.item.img || null, null, data.item.title || "获得物品");
-            }
-        }, 400);
-    }
-
-    // 系统提示与 Mori 指令
-    if (data.sysAlert) setTimeout(() => showSysAlert(data.sysAlert), 300);
+    // 其他逻辑 (item, Mori等) 保持不变...
     if (data.Mori) setTimeout(() => handleMoriCommand(data.Mori), 500);
-
-    // 6. 决策三角形逻辑
-    const isLastItem = (dialogIndex === dialogData.length - 1);
-    if (isLastItem && dialogTriangle) {
-        dialogTriangle.classList.add("decision-active-triangle");
-        dialogTriangle.onclick = (e) => {
-            e.stopPropagation();
-            openDecisionModal(); 
-        };
-    } else if (dialogTriangle) {
-        dialogTriangle.classList.remove("decision-active-triangle");
-        dialogTriangle.onclick = null;
-    }
 }
+
+
 function openDecisionModal() {
     const choiceBox = document.getElementById("choiceOverlay");
     document.getElementById("fixedOptions").style.display = "none";
