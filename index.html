@@ -5454,7 +5454,7 @@
           <!-- 5. 查看手机 -->
           <button class="nav-button" onclick="openLayer('layer-phone')">
             <img src="https://files.catbox.moe/7nbo56.png" alt="查看手机" />
-            <span>玩会手机</span>
+            <span>玩手机</span>
           </button>
         </div>
         <div id="sysAlertOverlay" class="sys-alert-overlay">
@@ -5466,7 +5466,7 @@
 
       <!-- 经营策略/营销方案选择弹窗 -->
 <div id="marketingOverlay" class="sys-alert-overlay" style="z-index: 4000;">
-  <div class="sys-alert-box" style="width: 600px; max-height: 80vh; overflow-y: auto; text-align: left;">
+  <div class="sys-alert-box" style="width: 600px; max-height: 800px; overflow-y: auto; text-align: left;">
       <div id="marketingTitle" style="font-size: 32px; color: #8b4513; font-weight: 900; margin-bottom: 20px; border-bottom: 4px double #deb887; padding-bottom: 10px; text-align: center;">
           方案选择
       </div>
@@ -11687,102 +11687,144 @@ const myShopName = shopConfig.identity.name;
         openLayer("layer-shop-admin");
         renderShopAdmin();
       }
-
-      function renderShopAdmin() {
+// 重新渲染管理终端的所有数据
+function renderShopAdmin() {
     const s = shopConfig;
+    if (!s || !s.identity) {
+        console.error("❌ 无法渲染：shopConfig 数据丢失");
+        return;
+    }
 
-    // 1. 基础信息赋值 (店名、地址等)
-    document.getElementById("admin-shop-name-input").value = s.identity.name;
-    document.getElementById("admin-lvl").innerText = s.identity.level;
+    // --- 1. 身份识别看板 ---
+    // 店名输入框
+    const nameInput = document.getElementById("admin-shop-name-input");
+    if(nameInput) nameInput.value = s.identity.name || "未命名店铺";
+    
+    // 等级勋章
+    const lvlEl = document.getElementById("admin-lvl");
+    if(lvlEl) lvlEl.innerText = s.identity.level || "1";
+    
+    // 知名度等级/称号
+    const repEl = document.getElementById("admin-reputation");
+    if(repEl) repEl.innerText = s.identity.reputation || "默默无闻";
+    
+    // 开店日期
+    const dateEl = document.getElementById("admin-date");
+    if(dateEl) dateEl.innerText = s.identity.establishedDate || "2026-01-01";
+    
+    // 地址输入框 (读取 s.identity.address)
     const addrInput = document.getElementById("admin-address-input");
-    if(addrInput) addrInput.value = s.identity.address;
+    if(addrInput) addrInput.value = s.identity.address || "尚未入驻地址";
 
-    // 2. 经营指标卡片绑定点击事件
-    const metricCards = {
+    // 经验值进度条
+    const xpValEl = document.getElementById("xp-val");
+    const xpBarEl = document.getElementById("xp-bar-fill");
+    if(xpValEl && xpBarEl) {
+        const xp = s.identity.xp || 0;
+        const next = s.identity.xpNext || 100;
+        xpValEl.innerText = `${xp} / ${next}`;
+        xpBarEl.style.width = Math.min(100, (xp / next) * 100) + "%";
+    }
+
+    // --- 2. 经营指标 (四个大卡片) ---
+    const metricConfig = {
         "stat-pop": 'popularity',
         "stat-hyg": 'hygiene',
         "stat-srv": 'service',
         "stat-wait": 'avgWaitTime'
     };
 
-    Object.entries(metricCards).forEach(([domId, metricType]) => {
+    Object.entries(metricConfig).forEach(([domId, metricKey]) => {
         const el = document.getElementById(domId);
         if (el) {
-            el.innerText = s.stats[metricType];
-            const parent = el.parentElement;
-            parent.style.cursor = 'pointer';
-            // 点击任何一个卡片，都会打开对应类别的策略菜单
-            parent.onclick = () => showStrategyMenu(metricType);
+            el.innerText = s.stats[metricKey];
+            // 绑定点击弹出方案菜单
+            el.parentElement.onclick = () => showStrategyMenu(metricKey);
+            el.parentElement.style.cursor = 'pointer';
         }
     });
 
-    // 3. 同步大众点评排名显示
-    const myShopName = s.identity.name;
+    // --- 3. 基础资产清单 (租金、员工、座位) ---
+    const rentEl = document.getElementById("stat-rent");
+    if(rentEl) rentEl.innerText = "¥ " + (s.stats.dailyRent || 0);
+    
+    const staffEl = document.getElementById("stat-staff");
+    if(staffEl) staffEl.innerText = (s.stats.staffCount || 0) + " 人";
+    
+    const seatEl = document.getElementById("stat-seating");
+    if(seatEl) seatEl.innerText = (s.stats.seatingCapacity || 0) + " 席";
+
+    // --- 4. 大众点评实时排名 ---
+    // 玩家店铺在大众点评里的实时分数和排名
     const myShopKey = Object.keys(phoneShopDB).find(key => 
         phoneShopDB[key].owner === playerName || phoneShopDB[key].owner === "{{user}}"
     );
     const myShopData = phoneShopDB[myShopKey] || { rating: 0, reviews: [] };
-    const cityRank = calculateCityRank(myShopData.rating, myShopName);
-    document.getElementById("dp-rank-num").innerText = cityRank;
-    // 1. 获取玩家店铺实时数据
+    
+    const dpScoreEl = document.getElementById("dp-score");
+    if(dpScoreEl) dpScoreEl.innerText = (myShopData.rating || 0).toFixed(1);
+    
+    const dpCountEl = document.getElementById("dp-count");
+    if(dpCountEl) dpCountEl.innerText = (myShopData.reviews || []).length;
 
-
-    // 2. 调用动态排名算法
-  
-
-    // 3. UI 渲染
-    document.getElementById("dp-score").innerText = myShopData.rating.toFixed(1);
-    document.getElementById("dp-count").innerText = (myShopData.reviews || []).length;
-    document.getElementById("dp-rank-num").innerText = cityRank; // 显示动态排位
+    const dpRankNum = document.getElementById("dp-rank-num");
+    if(dpRankNum) {
+        const cityRank = calculateCityRank(myShopData.rating, s.identity.name);
+        dpRankNum.innerText = cityRank;
+    }
 
     const dpStarsEl = document.getElementById("dp-stars");
     if (dpStarsEl) {
-        const fullStars = Math.floor(myShopData.rating);
+        const fullStars = Math.floor(myShopData.rating || 0);
         dpStarsEl.innerText = "★".repeat(fullStars) + "☆".repeat(5 - fullStars);
     }
 
-        // 5. 状态效果列表 (Active Effects)
-        const effectList = document.getElementById("admin-effects-list");
-        effectList.innerHTML = "";
-        s.activeEffects.forEach((eff) => {
-          const div = document.createElement("div");
-          div.className = `effect-card ${eff.type}`;
+    // --- 5. 实时 Buff 列表渲染 ---
+    renderActiveEffects();
 
-          let actionBtn = "";
-          if (eff.type === "debuff" && eff.isRemovable) {
-            actionBtn = `<button class="effect-action-btn btn-clear" onclick="handleEffectAction('${eff.id}', 'clear')">支付 ¥${eff.costToClear} 消除</button>`;
-          } else if (eff.type === "buff") {
-            actionBtn = `<button class="effect-action-btn btn-renew" onclick="handleEffectAction('${eff.id}', 'renew')">续期 ¥${eff.costToRenew}</button>`;
-          }
+    // --- 6. 增益市场渲染 ---
+    renderBuffMarket();
+}
 
-          div.innerHTML = `
+// 辅助渲染：当前 Buff
+function renderActiveEffects() {
+    const list = document.getElementById("admin-effects-list");
+    if(!list) return;
+    list.innerHTML = "";
+    
+    shopConfig.activeEffects.forEach(eff => {
+        const div = document.createElement("div");
+        div.className = `effect-card ${eff.type}`;
+        div.innerHTML = `
             <div class="effect-icon">${eff.icon}</div>
             <div class="effect-info">
                 <b>${eff.name}</b>
                 <small>${eff.desc}</small>
                 <span>${eff.effect} (剩余 ${eff.remainingDays} 天)</span>
             </div>
-            ${actionBtn}
+            ${eff.type === 'debuff' ? `<button class="effect-action-btn btn-clear" onclick="handleEffectAction('${eff.id}', 'clear')">消除</button>` : ''}
         `;
-          effectList.appendChild(div);
-        });
+        list.appendChild(div);
+    });
+}
 
-        // 6. 增益市场渲染 (Buff Market)
-        const marketList = document.getElementById("admin-market-list");
-        marketList.innerHTML = "";
-        s.buffMarket.forEach((item) => {
-          const card = document.createElement("div");
-          card.className = "market-item";
-          card.innerHTML = `
+// 辅助渲染：市场
+function renderBuffMarket() {
+    const list = document.getElementById("admin-market-list");
+    if(!list) return;
+    list.innerHTML = "";
+    
+    shopConfig.buffMarket.forEach(item => {
+        const card = document.createElement("div");
+        card.className = "market-item";
+        card.innerHTML = `
             <b class="mkt-name">${item.name}</b>
             <span class="mkt-effect">${item.effect}</span>
-            <div style="font-size:12px; color:#999; margin-top:5px;">持续: ${item.duration}天</div>
             <button class="mkt-buy-btn" onclick="buyMarketBuff('${item.id}')">¥${item.cost} 购买</button>
         `;
-          marketList.appendChild(card);
-        });
-      }
-
+        list.appendChild(card);
+    });
+}
 
       // 1. 数据更新函数 (给输入框用的)
       function syncShopName(newName) {
