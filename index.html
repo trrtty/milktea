@@ -10969,7 +10969,7 @@ function renderSimMatchList() {
                 <i class="fa-solid fa-xmark"></i>
             </div>
 
-            <div class="match-status-tag" style="background:#DEB887; color:white;">邀约中</div>
+           
             <h3 class="match-title">${title}</h3>
             
 
@@ -13648,54 +13648,43 @@ function getSelectedLayer() {
 }
 
 
-/**
- * 处理 AI 生成完毕后的 Assistant 消息
- */
-/**
- * 增强版 AI 回复解析器：支持剧情、变量同步和红点系统
- */
- async function handleLLMResponse(messageId) {
+async function handleLLMResponse(messageId) {
     try {
         const msgs = TavernHelper.getChatMessages(messageId);
         if (!msgs || msgs.length === 0) return;
         const rawText = msgs[0].message || '';
 
-        // --- 1. [新增] 红点侦测逻辑 (解析 JSONPatch) ---
+        // --- 1. [红点解析] ---
         const patchRegex = /<JSONPatch>([\s\S]*?)<\/JSONPatch>/i;
         const patchMatch = rawText.match(patchRegex);
         if (patchMatch) {
             try {
                 const patches = JSON.parse(patchMatch[1].trim());
                 patches.forEach(p => {
-                    // 如果修改了论坛数据库，亮起论坛红点
+                    // 论坛更新
                     if (p.path.includes("phoneForumDB")) {
                         notificationState.hasForumUpdate = true;
                     }
-                    // 如果修改了聊天历史，提取联系人 ID
+                    // 私信更新：从路径中提取联系人 ID
                     if (p.path.includes("phoneChatDB")) {
                         const parts = p.path.split('/');
-                        // 路径示例: /phoneChatDB/蛋糕店店主/history/-
-                        if (parts[2]) {
-                            const contactId = parts[2];
-                            if (!notificationState.unreadChats.includes(contactId)) {
-                                notificationState.unreadChats.push(contactId);
-                            }
+                        // 如果路径是 /phoneChatDB/码农/history/-，parts[2] 就是 "码农"
+                        const contactKey = parts[2];
+                        if (contactKey && !notificationState.unreadChats.includes(contactKey)) {
+                            notificationState.unreadChats.push(contactKey);
                         }
                     }
                 });
-                saveNotificationState(); // 保存到本地
-                updateRedDotUI();       // 刷新界面显示
-            } catch (e) {
-                console.error("JSONPatch 数据解析失败:", e);
-            }
+                saveNotificationState();
+                updateRedDotUI();
+            } catch (e) { console.error("JSONPatch解析失败", e); }
         }
 
-        // --- 2. [原有] 提取剧情 <dialogtext> ---
-        const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/i;
-        const match = rawText.match(regex);
-        if (match) {
-            let content = match[1].trim();
-            content = content.replace(/<!--[\s\S]*?-->/g, ""); 
+        // --- 2. [剧情解析] ---
+        const dialogRegex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/i;
+        const dialogMatch = rawText.match(dialogRegex);
+        if (dialogMatch) {
+            let content = dialogMatch[1].trim().replace(/<!--[\s\S]*?-->/g, "");
             const start = content.indexOf('[');
             const end = content.lastIndexOf(']');
             if (start !== -1 && end !== -1) {
@@ -13706,22 +13695,17 @@ function getSelectedLayer() {
             }
         }
 
-        // --- 3. [原有] 同步变量并显示剧情 ---
+        // --- 3. [数据同步] ---
         await reloadGameData(messageId);
         const loader = document.getElementById("devLoading");
         if (loader) loader.style.display = "none";
         nextDialog();
 
     } catch (e) {
-        console.error("❌ 解析 AI 回复失败:", e);
-        if (document.getElementById("devLoading")) {
-            document.getElementById("devLoading").style.display = "none";
-        }
+        console.error("❌ 处理回复失败:", e);
+        if (document.getElementById("devLoading")) document.getElementById("devLoading").style.display = "none";
     }
 }
-/**
- * 强制从 MVU 刷新经营数值
- */
 async function reloadGameData(mid) {
     try {
         // 获取该楼层关联的变量快照
@@ -14285,42 +14269,39 @@ async function dismissPhoneMatch(matchTitle) {
 }
 
 function updateRedDotUI() {
-    // 1. 检查总入口：底部导航栏“查看手机”按钮
-    const hasAnyUpdate = notificationState.hasForumUpdate || notificationState.unreadChats.size > 0;
-    const phoneNavBtn = document.querySelector("button[onclick*='layer-phone']");
+    const hasAnyUpdate = notificationState.hasForumUpdate || notificationState.unreadChats.length > 0;
+    
+    // 1. 大堂底部“查看手机”按钮
+    const phoneNavBtn = document.querySelector(".nav-button[onclick*='layer-phone']");
     if (phoneNavBtn) {
-        let dot = phoneNavBtn.querySelector(".dot-indicator");
-        if (!dot) {
-            dot = document.createElement("div");
-            dot.className = "dot-indicator";
-            phoneNavBtn.appendChild(dot);
-        }
+        let dot = phoneNavBtn.querySelector(".dot-indicator") || createDot(phoneNavBtn);
         dot.style.display = hasAnyUpdate ? "block" : "none";
     }
 
-    // 2. 检查手机主屏幕内部图标
-    const forumApp = document.querySelector(".app-item[onclick*='forum']");
-    if (forumApp) {
-        let dot = forumApp.querySelector(".dot-indicator");
-        if (!dot) {
-            dot = document.createElement("div");
-            dot.className = "dot-indicator";
-            forumApp.appendChild(dot);
-        }
-        dot.style.display = notificationState.hasForumUpdate ? "block" : "none";
-    }
-
+    // 2. 手机桌面图标 (消息列表)
     const chatApp = document.querySelector(".app-item[onclick*='chat-list']");
     if (chatApp) {
-        let dot = chatApp.querySelector(".dot-indicator");
-        if (!dot) {
-            dot = document.createElement("div");
-            dot.className = "dot-indicator";
-            chatApp.appendChild(dot);
-        }
-        dot.style.display = notificationState.unreadChats.size > 0 ? "block" : "none";
+        let dot = chatApp.querySelector(".dot-indicator") || createDot(chatApp);
+        dot.style.display = notificationState.unreadChats.length > 0 ? "block" : "none";
+    }
+
+    // 3. 手机桌面图标 (超话论坛)
+    const forumApp = document.querySelector(".app-item[onclick*='forum']");
+    if (forumApp) {
+        let dot = forumApp.querySelector(".dot-indicator") || createDot(forumApp);
+        dot.style.display = notificationState.hasForumUpdate ? "block" : "none";
     }
 }
+
+// 辅助工具：如果没红点就建一个
+function createDot(parent) {
+    const dot = document.createElement("div");
+    dot.className = "dot-indicator";
+    parent.appendChild(dot);
+    return dot;
+}
+
+
 </script>
   </body>
 </html>
