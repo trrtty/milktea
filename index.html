@@ -5465,7 +5465,7 @@
           <!-- 5. 查看手机 -->
           <button class="nav-button" onclick="openLayer('layer-phone')">
             <img src="https://files.catbox.moe/7nbo56.png" alt="查看手机" />
-            <span>手机</span>
+            <span>查看手机</span>
           </button>
         </div>
         <div id="sysAlertOverlay" class="sys-alert-overlay">
@@ -14016,43 +14016,34 @@ function toggleFullScreen() {
 }
 
 /**
- * 终极防错版摘要解析：
- * 1. 物理删除所有 <think> 块，防止 AI 思考逻辑干扰。
- * 2. 精准定位最后一段摘要。
+ * 借用 dialogtext 作为锚点，精准抓取其后的真摘要
  */
  function parseSumFromRaw(text) {
     if (!text) return "未命名的剧情点";
 
-    // --- 第一步：物理隔离思考块 ---
-    // 无论 AI 在 think 里写了多少个 <summary>，全部抹除
-    let bodyText = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+    // 1. 如果有 dialogtext 标签，直接切断，只看它后面的内容
+    // 这样前面的 <think> 和法语代码会被物理屏蔽
+    let searchArea = text;
+    if (text.includes('</dialogtext>')) {
+        searchArea = text.split('</dialogtext>').pop(); 
+    }
 
-    // --- 第二步：提取真摘要 ---
-    // 使用全局匹配 gi
-    const regex = /<summary>([\s\S]*?)<\/summary>/gi;
-    const matches = Array.from(bodyText.matchAll(regex));
+    // 2. 在切剩下的“干净区域”里找 summary
+    const match = searchArea.match(/<summary>([\s\S]*?)<\/summary>/i);
 
-    if (matches.length > 0) {
-        // 拿到最后一对标签的内容
-        let finalSummary = matches[matches.length - 1][1].trim();
+    if (match && match[1]) {
+        let finalSummary = match[1].trim();
         
-        // --- 第三步：深度清理内容 ---
-        // 1. 剔除摘要内容中可能残留的 HTML 注释
-        finalSummary = finalSummary.replace(/<!--[\s\S]*?-->/g, "");
-        // 2. 剔除由于 AI 幻觉可能多包了一层的标签（如摘要里又写了 <UpdateVariable>）
+        // 3. 清理掉可能残留的注释或杂质标签
         finalSummary = finalSummary.replace(/<[\s\S]*?>/g, "");
-        
-        // --- 第四步：长度保护 ---
-        if (finalSummary.length > 150) {
-            finalSummary = finalSummary.substring(0, 150) + "...";
-        }
-        
+        finalSummary = finalSummary.replace(/<!--[\s\S]*?-->/g, "");
+
         return finalSummary;
     }
 
-    return "未命名的剧情点";
+    // 4. 兜底：如果实在没写标签，尝试从 searchArea 里取第一行非空文字
+    return "点击回顾剧情";
 }
-
 function confirmBranch(mid, summary) {
     if (confirm(`🕰️ 确定要回溯到此时间点吗？\n\n"${summary}"\n\n注意：这会创建一个新的对话分支。`)) {
         TavernHelper.executeCommand(`/branch-create ${mid}`);
