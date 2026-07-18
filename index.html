@@ -4351,11 +4351,21 @@
 
         <div id="layer-currency" class="popup-layer">
           <div class="popup-header">
-            <button class="back-btn" onclick="closeLayer('layer-currency')">
-              ❮ 返回大堂
-            </button>
-            <div class="popup-title">财务报表</div>
-          </div>
+            <button class="back-btn" onclick="closeLayer('layer-currency')">❮ 返回大堂</button>
+            
+            <!-- 修改后的标题区域：增加 Flex 布局让文字和按钮并排 -->
+            <div class="popup-title" style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-right: 100px;">
+                <span>财务报表</span>
+                
+                <!-- 清空按钮：样式已调整为适配顶栏的深棕色风格 -->
+                <button onclick="clearFinancialRecords()" 
+                        style="background: #8b4513; border: none; color: #fff; font-size: 14px; cursor: pointer; padding: 4px 12px; border-radius: 15px; font-weight: bold; transition: 0.2s;"
+                        onmouseover="this.style.background='#a0522d'" 
+                        onmouseout="this.style.background='#8b4513'">
+                    [ 清空记录 ]
+                </button>
+            </div>
+        </div>
           <div class="popup-content">
             <div class="receipt-container">
               <!-- 头部 -->
@@ -4378,7 +4388,8 @@
               <!-- 流水列表 -->
               <div class="receipt-section-title">
                 TRANSACTION LOG / 流水记录
-              </div>
+            </div>
+            
               <div id="receipt-records-list">
                 <!-- 由 JS 渲染 -->
               </div>
@@ -5454,7 +5465,7 @@
           <!-- 5. 查看手机 -->
           <button class="nav-button" onclick="openLayer('layer-phone')">
             <img src="https://files.catbox.moe/7nbo56.png" alt="查看手机" />
-            <span>玩手机</span>
+            <span>查看手机</span>
           </button>
         </div>
         <div id="sysAlertOverlay" class="sys-alert-overlay">
@@ -5465,15 +5476,26 @@
       </div>
 
       <!-- 经营策略/营销方案选择弹窗 -->
+<!-- 经营策略选择弹窗 -->
 <div id="marketingOverlay" class="sys-alert-overlay" style="z-index: 4000;">
-  <div class="sys-alert-box" style="width: 600px; max-height: 800px; overflow-y: auto; text-align: left;">
+  <!-- 增加 position: relative 确保叉叉定位正确 -->
+  <div class="sys-alert-box" style="width: 600px; max-height: 80vh; overflow-y: auto; text-align: left; position: relative; padding-top: 50px;">
+      
+      <!-- 右上角关闭叉叉 -->
+      <div onclick="closeMarketingMenu()" 
+           style="position: absolute; top: 15px; right: 20px; font-size: 40px; cursor: pointer; color: #8b4513; font-weight: bold; line-height: 1; transition: 0.2s;"
+           onmouseover="this.style.color='#ff6b81'" onmouseout="this.style.color='#8b4513'">
+          &times;
+      </div>
+
       <div id="marketingTitle" style="font-size: 32px; color: #8b4513; font-weight: 900; margin-bottom: 20px; border-bottom: 4px double #deb887; padding-bottom: 10px; text-align: center;">
           方案选择
       </div>
       <div id="marketingList" style="display: flex; flex-direction: column; gap: 15px;">
           <!-- 策略选项将在这里动态生成 -->
       </div>
-      <button class="confirm-btn" style="width: 100%; margin-top: 25px; background: #949f9f;" onclick="closeMarketingMenu()">取消返回</button>
+
+      <!-- 移除了最下方的取消按钮 -->
   </div>
 </div>
         <!-- === 新增：获得物品弹窗 === -->
@@ -9994,6 +10016,14 @@ function handleSort(criterion, btn) {
     "在深夜时段，如果你的店名带有治愈、温暖等词汇，知名度的增长速度会翻倍。",
     "如果你在现实中感到疲惫，可以在设置里开启轻松模式，享受慢节奏的奶茶生活。",
     "原料弹球的速度是会随碰撞衰减的，但只要不停点击，它就能永远保持动力。",
+    "知名度遭遇瓶颈？尝试点击知名度卡片，雇佣水军或黑粉在社交平台带带节奏吧。",
+    "腹黑经营并不总是坏事，偶尔贿赂一下下一场比赛的评委，能让你拿奖容易得多。",
+    "店铺地址是可以点击修改的，搬迁到一个租金昂贵但地段极佳的位置能快速吸引高质素客流。",
+    "卫生值不仅影响评价，还会触发随机的卫生局突击检查，别等到那时候再请专业消杀。",
+    "在奶茶超话里投放黑粉拉踩竞争对手是一把双刃剑，虽然能提升知名度，但也可能引发口碑反噬。",
+    "经营方案中的‘无厘头’选项虽然离谱，但往往能在年轻群体中产生意想不到的病毒式传播效果。",
+    "如果账单太乱了，可以使用流水记录旁边的 [清空记录] 按钮，这不会改变你的现金余额。",
+    "点击知名度、卫生、服务或出餐卡片，都能呼出对应的专属提升方案库。",
 ];
 
 
@@ -13198,6 +13228,55 @@ function syncStoryUI(data) {
     novelLayer.style.display = "none";
     gameDialog.style.display = "block";
 
+
+// ==========================================
+    // 🔥 【增强版】：支持正负值的金钱变动
+    // ==========================================
+    if (data.currency) {
+        const amount = data.currency.amount;
+        // 自动判定类型
+        const isIncome = amount >= 0;
+        const title = data.currency.title || (isIncome ? "获得收入" : "产生支出");
+        const type = isIncome ? "income" : "expense";
+
+        // 1. 更新内存余额
+        shopFinancials.currentBalance += amount;
+
+        // 2. 记入账单 (根据正负值自动分类)
+        if (typeof shopFinancials.records === 'undefined') shopFinancials.records = [];
+        shopFinancials.records.unshift({
+            date: getGameTimeStamp(),
+            item: title,
+            amount: amount, // 存入原始值（正或负）
+            type: type
+        });
+
+        // 3. 刷新 UI 显示
+        syncGlobalBalance();
+        if (document.getElementById('layer-currency').style.display === 'flex') {
+            renderFinancialStatement();
+        }
+
+        // 4. 弹出提示 (如果是扣钱，符号会自动变成 -)
+        const sign = isIncome ? "+" : ""; 
+        const popupText = `${sign} ¥${amount}`;
+
+        setTimeout(() => {
+            showItemPopup(
+                popupText, 
+                "https://files.catbox.moe/av7b0x.png", // 即使扣钱也可以沿用金币图，或者你有专属扣钱图
+                null, 
+                title
+            );
+        }, 400);
+
+        // 如果是扣钱，在控制台给个醒目的警告
+        if (!isIncome) {
+            console.warn(`💸 支出警告: ${title} ${amount}`);
+        }
+    }
+
+
     if (data.season || data.time || data.weather) updateEnvironmentUI(data);
 
     let speakerName = data.name;
@@ -14452,6 +14531,32 @@ async function executeOperationalStrategy(metricType, action) {
     
     document.getElementById("marketingOverlay").style.display = "none";
     showSysAlert(`🚀 方案生效！\n指标已更新。`);
+}
+
+
+/**
+ * 清空所有财务流水记录
+ */
+ async function clearFinancialRecords() {
+    // 1. 安全确认，防止误点
+    if (!confirm("🚨 警告：确定要永久清空所有流水记录吗？\n此操作不可撤销（当前的现金余额将被保留）。")) {
+        return;
+    }
+
+    // 2. 执行清空逻辑
+    shopFinancials.records = [];
+    // 更新最后更新时间
+    shopFinancials.lastUpdate = getGameTimeStamp();
+
+    // 3. UI 反馈与刷新
+    renderFinancialStatement(); // 重新渲染账单页面
+    
+    // 4. 同步至云端存档 (MVU)
+    await saveShopDataToMvu();
+
+    // 5. 提示用户
+    showSysAlert("🧹 历史流水记录已全部清除。");
+    console.log("财务流水已清空。");
 }
 </script>
   </body>
