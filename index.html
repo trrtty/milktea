@@ -13065,49 +13065,49 @@ let currentSpeakerName = "";
 // 在全局变量区域定义这个，用于拼接表情路径
 
 
-
 function syncStoryUI(data) {
     const novelLayer = document.getElementById("novelGlassLayer");
     const novelBody = document.getElementById("novelBodyMD");
     const gameDialog = document.getElementById("gameDialog");
-    const baseImg = document.getElementById("baseCharImg"); 
+    const baseImg = document.getElementById("baseCharImg");
     const moodContainer = document.getElementById("moodLayersContainer");
     const uiInfoBox = document.getElementById("charInfoBox");
     const dialogTriangle = document.getElementById("dialogTriangle");
 
-    // 1. 处理小说模式
+    // 1. 【初始清理】每次调用先清空表情层，防止表情叠加
+    if (moodContainer) moodContainer.innerHTML = "";
+
     if (data.type === "novel") {
         gameDialog.style.display = "none";
+        if (baseImg) baseImg.style.display = "none";
+        if (moodContainer) moodContainer.style.display = "none";
+        if (uiInfoBox) uiInfoBox.style.display = "none";
         novelLayer.style.display = "flex";
         novelBody.innerHTML = parseMarkdown(data.text);
         return;
     }
 
-    // 2. 正常显示初始化
     novelLayer.style.display = "none";
     gameDialog.style.display = "block";
+
     if (data.season || data.time || data.weather) updateEnvironmentUI(data);
 
     let speakerName = data.name;
+    // 判断是否为特殊身份
     const isSpecial = (speakerName === "旁白" || speakerName === "系统" || speakerName === playerName);
 
-    // ==========================================
-    // 🔥 【核心修正】：仅针对“第一个对话”进行立绘大扫除
-    // 如果剧本开始第一句是特殊角色，彻底切断与上一场戏立绘的联系
-    // ==========================================
-    if (dialogIndex === 0 && isSpecial) {
-        if (baseImg) baseImg.style.display = 'none';
-        if (moodContainer) {
-            moodContainer.style.display = 'none';
-            moodContainer.innerHTML = ""; 
+    // --- 【逻辑修正：特殊身份处理】 ---
+    if (isSpecial) {
+        // 如果是第一句对话，且是旁白/系统/玩家，则初始隐藏所有立绘相关UI
+        // 注：假设 dialogIndex 是全局变量或在上层作用域
+        if (typeof dialogIndex !== 'undefined' && dialogIndex === 0) {
+            if (baseImg) baseImg.style.display = "none";
+            if (moodContainer) moodContainer.style.display = "none";
+            if (uiInfoBox) uiInfoBox.style.display = "none";
         }
-        if (uiInfoBox) uiInfoBox.style.display = 'none';
-        currentActiveCustomerId = ""; 
-        currentSpeakerName = "";
-    }
-
-    // 3. 正常角色逻辑 (不受 index 限制)
-    if (!isSpecial) {
+        // 如果不是第一句（后面穿插的旁白），则不执行任何隐藏操作，立绘保持原样
+    } else {
+        // --- 【常规 NPC 逻辑】 ---
         let targetId = data.id;
         let targetDesc = data.desc;
 
@@ -13115,55 +13115,97 @@ function syncStoryUI(data) {
             if (customersDB[key].name === speakerName) {
                 targetId = targetId || customersDB[key].id;
                 targetDesc = targetDesc || customersDB[key].desc || customersDB[key].shortDesc || "一位神秘的食客";
-                break; 
+                break;
             }
         }
 
         if (targetId) {
             currentActiveCustomerId = targetId;
             currentSpeakerName = speakerName;
-            
-            document.querySelector(".character-name").innerText = speakerName;
-            document.querySelector(".character-desc").innerText = targetDesc;
-            
-            baseImg.src = nobgBaseUrl + currentActiveCustomerId + ".png";
-            baseImg.style.display = "block";
+
+            // 强制更新并显示
+            const nameEl = document.querySelector(".character-name");
+            const descEl = document.querySelector(".character-desc");
+            if (nameEl) nameEl.innerText = speakerName;
+            if (descEl) descEl.innerText = targetDesc;
+
+            if (baseImg) {
+                baseImg.src = nobgBaseUrl + currentActiveCustomerId + ".png";
+                baseImg.style.display = "block";
+            }
             if (uiInfoBox) uiInfoBox.style.display = "block";
-        }
-    } else {
-        // 如果中间某行又出现了旁白，你想保留上一句NPC立绘，就不需要写隐藏逻辑
-        // 如果想让旁白行也自动隐藏立绘，可以把隐藏逻辑写在 else 里。
-    }
-
-    // 处理表情渲染
-    if (currentActiveCustomerId && data.mood) {
-        if (moodContainer) {
-            moodContainer.innerHTML = ""; // 换表情前先清空
-            moodContainer.style.display = "block";
-            const moods = Array.isArray(data.mood) ? data.mood : [data.mood];
-            moods.forEach(moodName => {
-                if (!moodName) return;
-                const img = document.createElement("img");
-                img.src = `https://raw.githubusercontent.com/trrtty/milktea/main/consumers/${currentSpeakerName}/${moodName}.png`;
-                img.className = "character-image"; 
-                img.style.position = "absolute";
-                img.style.top = "0"; img.style.left = "0";
-                img.style.pointerEvents = "none";
-                moodContainer.appendChild(img);
-            });
+            if (moodContainer) moodContainer.style.display = "block";
         }
     }
 
-    // 对话文本显示
+    // 2. 【Leave 指令】只有这里会强制清理场上立绘
+    if (data.action === "leave") {
+        currentActiveCustomerId = "";
+        currentSpeakerName = "";
+        if (baseImg) baseImg.style.display = 'none';
+        if (moodContainer) moodContainer.style.display = 'none';
+        if (uiInfoBox) uiInfoBox.style.display = 'none';
+    }
+
+    // 3. 渲染表情（仅在有角色在线时）
+    if (currentActiveCustomerId && data.mood && !isSpecial) {
+        const moods = Array.isArray(data.mood) ? data.mood : [data.mood];
+        moods.forEach(moodName => {
+            if (!moodName) return;
+            const img = document.createElement("img");
+            img.src = `https://raw.githubusercontent.com/trrtty/milktea/main/consumers/${currentSpeakerName}/${moodName}.png`;
+            img.className = "character-image";
+            img.style.position = "absolute";
+            img.style.top = "0"; img.style.left = "0";
+            img.style.zIndex = "10";
+            img.style.pointerEvents = "none";
+            img.onerror = () => img.remove();
+            moodContainer.appendChild(img);
+        });
+        moodContainer.style.display = "block";
+    }
+
+    // 4. 对话框文字更新
     if (data.text) {
-        document.getElementById("dialogName").innerText = speakerName;
-        document.getElementById("dialogText").innerText = data.text;
+        const dName = document.getElementById("dialogName");
+        const dText = document.getElementById("dialogText");
+        if (dName) dName.innerText = speakerName;
+        if (dText) dText.innerText = data.text;
     }
 
-    // 其他逻辑 (item, Mori等) 保持不变...
-    if (data.Mori) setTimeout(() => handleMoriCommand(data.Mori), 500);
-}
+    // 物品弹出逻辑
+    if (data.item) {
+        setTimeout(async () => {
+            if (data.item.data) {
+                await unlockNewIngredient(data.item.data);
+                showItemPopup(data.item.name, null, data.item.data, "获得新原料");
+            } else {
+                showItemPopup(data.item.name, data.item.img || null, null, data.item.title || "获得物品");
+            }
+        }, 400);
+    }
 
+    if (data.sysAlert) setTimeout(() => showSysAlert(data.sysAlert), 300);
+    
+    if (data.Mori) {
+        setTimeout(() => {
+            handleMoriCommand(data.Mori);
+        }, 500);
+    }
+
+    // 决策三角形逻辑
+    const isLastItem = (typeof dialogIndex !== 'undefined' && typeof dialogData !== 'undefined' && dialogIndex === dialogData.length - 1);
+    if (isLastItem && dialogTriangle) {
+        dialogTriangle.classList.add("decision-active-triangle");
+        dialogTriangle.onclick = (e) => {
+            e.stopPropagation();
+            openDecisionModal();
+        };
+    } else if (dialogTriangle) {
+        dialogTriangle.classList.remove("decision-active-triangle");
+        dialogTriangle.onclick = null;
+    }
+}
 
 function openDecisionModal() {
     const choiceBox = document.getElementById("choiceOverlay");
