@@ -5465,7 +5465,7 @@
           <!-- 5. 查看手机 -->
           <button class="nav-button" onclick="openLayer('layer-phone')">
             <img src="https://files.catbox.moe/7nbo56.png" alt="查看手机" />
-            <span>手机</span>
+            <span>查看手机</span>
           </button>
         </div>
         <div id="sysAlertOverlay" class="sys-alert-overlay">
@@ -10861,45 +10861,54 @@ function goSubmitTask(customerId) {
     const taskName = phoneTaskDB[customerId] ? phoneTaskDB[customerId].name : "顾客";
     showSysAlert(`💡 正在处理 ${taskName} 的委托\n请在配方库中选择一款饮品提交。`);
 }
+/**
+ * 场景队列处理器：负责断点续传，让回溯或刷新后能自动弹出界面
+ */
  async function processSceneQueue() {
+    // 1. 检查队列里是否有待处理任务
     if (!appSettings.pendingScenes || appSettings.pendingScenes.length === 0) return;
 
-    // 永远处理队列里的第一个
+    // 2. 取出第一个任务（优先级最高）
     const nextTask = appSettings.pendingScenes[0];
+    console.log("🛠️ 正在尝试自动恢复场景:", nextTask);
 
-    if (nextTask === 'match-result') {
+    // --- 分支 A: 自动恢复【工坊精修】界面 ---
+    if (nextTask === 'layer-result') {
+        const stats = editorState.tempStats;
+        if (stats && stats.code) {
+            // A-1. 打开界面
+            openLayer("layer-result");
+            
+            // A-2. 解析配方码并填入编辑器
+            const decodedLayers = parseShortCode(stats.code);
+            if (decodedLayers) {
+                editorState.layers = decodedLayers;
+                // 默认选中最上层
+                if (editorState.layers.length > 0) {
+                    editorState.selectedId = editorState.layers[editorState.layers.length - 1].uid;
+                }
+            }
+            
+            // A-3. 刷新 UI 显示
+            updateStatsUI();
+            renderEditor();
+            console.log("✅ 已自动续接精修界面");
+        }
+    } 
+    
+    // --- 分支 B: 自动恢复【比赛结果】界面 ---
+    else if (nextTask === 'match-result') {
         const mId = localStorage.getItem("milktea_match_id");
-        // 增加一层预检：如果 DB 里根本没有这个 ID，直接不进场
         if (mId && matchResultsDB[mId]) {
             openLayer("layer-phone");
             navigateToPhone("match-detail"); 
             openMatchResult(mId); 
-        } else {
-            console.warn("跳过无效的比赛结果任务:", mId);
-            appSettings.pendingScenes.shift(); // 直接从队列里踢掉
-            saveShopDataToMvu(); // 保存清理后的状态
-            processSceneQueue(); // 处理下一个（如：精修界面）
-        }
-    } 
-    else if (nextTask === 'layer-result') {
-        const stats = editorState.tempStats;
-    const localBackup = JSON.parse(localStorage.getItem('milktea_dev_backup') || '{}');
-    
-    const finalCode = stats.code || localBackup.code;
-        if (stats && stats.code) {
-            // 如果此时手机层开着（说明刚从比赛看完出来），先关掉
-            closeLayer('layer-phone');
-            
-            openLayer("layer-result");
-            editorState.layers = parseShortCode(stats.code);
-            if (editorState.layers.length > 0) {
-                editorState.selectedId = editorState.layers[editorState.layers.length - 1].id;
-            }
-            updateStatsUI();
-            renderEditor();
+            console.log("✅ 已自动续接比赛现场");
         }
     }
 }
+
+
 // 辅助：异常跳过功能
 function skipCurrentScene() {
     if (appSettings.pendingScenes) {
