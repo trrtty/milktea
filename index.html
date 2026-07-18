@@ -5435,7 +5435,7 @@
           <!-- 5. 查看手机 -->
           <button class="nav-button" onclick="openLayer('layer-phone')">
             <img src="https://files.catbox.moe/7nbo56.png" alt="查看手机" />
-            <span>修复roll查看手机</span>
+            <span>修复对话查看手机</span>
           </button>
         </div>
         <div id="sysAlertOverlay" class="sys-alert-overlay">
@@ -13076,11 +13076,12 @@ function syncStoryUI(data) {
     const novelLayer = document.getElementById("novelGlassLayer");
     const novelBody = document.getElementById("novelBodyMD");
     const gameDialog = document.getElementById("gameDialog");
-    const baseImg = document.getElementById("baseCharImg"); 
+    const baseImg = document.getElementById("baseCharImg");
     const moodContainer = document.getElementById("moodLayersContainer");
     const uiInfoBox = document.getElementById("charInfoBox");
     const dialogTriangle = document.getElementById("dialogTriangle");
 
+    // 1. 【初始清理】每次调用先清空表情层，防止表情叠加
     if (moodContainer) moodContainer.innerHTML = "";
 
     if (data.type === "novel") {
@@ -13095,42 +13096,56 @@ function syncStoryUI(data) {
 
     novelLayer.style.display = "none";
     gameDialog.style.display = "block";
-    
+
     if (data.season || data.time || data.weather) updateEnvironmentUI(data);
 
     let speakerName = data.name;
-    const isSpecial = (speakerName === "旁白" || speakerName === "系统" || speakerName === playerName );
-    // --- 【Bug 修复开始】 ---
-    if (!isSpecial) {
+    // 判断是否为特殊身份
+    const isSpecial = (speakerName === "旁白" || speakerName === "系统" || speakerName === playerName);
+
+    // --- 【逻辑修正：特殊身份处理】 ---
+    if (isSpecial) {
+        // 如果是第一句对话，且是旁白/系统/玩家，则初始隐藏所有立绘相关UI
+        // 注：假设 dialogIndex 是全局变量或在上层作用域
+        if (typeof dialogIndex !== 'undefined' && dialogIndex === 0) {
+            if (baseImg) baseImg.style.display = "none";
+            if (moodContainer) moodContainer.style.display = "none";
+            if (uiInfoBox) uiInfoBox.style.display = "none";
+        }
+        // 如果不是第一句（后面穿插的旁白），则不执行任何隐藏操作，立绘保持原样
+    } else {
+        // --- 【常规 NPC 逻辑】 ---
         let targetId = data.id;
         let targetDesc = data.desc;
 
-        // 无论 JSON 有没有给信息，都优先去数据库里搜人
         for (let key in customersDB) {
             if (customersDB[key].name === speakerName) {
                 targetId = targetId || customersDB[key].id;
-                // 补全描述：JSON 声明 > 数据库描述 > 数据库短评 > 默认值
                 targetDesc = targetDesc || customersDB[key].desc || customersDB[key].shortDesc || "一位神秘的食客";
-                break; 
+                break;
             }
         }
 
-        // 只要搜到了有效的 ID
         if (targetId) {
             currentActiveCustomerId = targetId;
             currentSpeakerName = speakerName;
-            
-            // 【核心修正】：强制更新 DOM，不套在 if(换人) 的判断里
-            document.querySelector(".character-name").innerText = speakerName;
-            document.querySelector(".character-desc").innerText = targetDesc;
-            
-            baseImg.src = nobgBaseUrl + currentActiveCustomerId + ".png";
-            baseImg.style.display = "block";
+
+            // 强制更新并显示
+            const nameEl = document.querySelector(".character-name");
+            const descEl = document.querySelector(".character-desc");
+            if (nameEl) nameEl.innerText = speakerName;
+            if (descEl) descEl.innerText = targetDesc;
+
+            if (baseImg) {
+                baseImg.src = nobgBaseUrl + currentActiveCustomerId + ".png";
+                baseImg.style.display = "block";
+            }
             if (uiInfoBox) uiInfoBox.style.display = "block";
+            if (moodContainer) moodContainer.style.display = "block";
         }
     }
-    // --- 【Bug 修复结束】 ---
 
+    // 2. 【Leave 指令】只有这里会强制清理场上立绘
     if (data.action === "leave") {
         currentActiveCustomerId = "";
         currentSpeakerName = "";
@@ -13139,14 +13154,14 @@ function syncStoryUI(data) {
         if (uiInfoBox) uiInfoBox.style.display = 'none';
     }
 
-    // 渲染表情
-    if (currentActiveCustomerId && data.mood) {
+    // 3. 渲染表情（仅在有角色在线时）
+    if (currentActiveCustomerId && data.mood && !isSpecial) {
         const moods = Array.isArray(data.mood) ? data.mood : [data.mood];
         moods.forEach(moodName => {
             if (!moodName) return;
             const img = document.createElement("img");
             img.src = `https://raw.githubusercontent.com/trrtty/milktea/main/consumers/${currentSpeakerName}/${moodName}.png`;
-            img.className = "character-image"; 
+            img.className = "character-image";
             img.style.position = "absolute";
             img.style.top = "0"; img.style.left = "0";
             img.style.zIndex = "10";
@@ -13157,9 +13172,12 @@ function syncStoryUI(data) {
         moodContainer.style.display = "block";
     }
 
+    // 4. 对话框文字更新
     if (data.text) {
-        document.getElementById("dialogName").innerText = speakerName;
-        document.getElementById("dialogText").innerText = data.text;
+        const dName = document.getElementById("dialogName");
+        const dText = document.getElementById("dialogText");
+        if (dName) dName.innerText = speakerName;
+        if (dText) dText.innerText = data.text;
     }
 
     // 物品弹出逻辑
@@ -13175,27 +13193,26 @@ function syncStoryUI(data) {
     }
 
     if (data.sysAlert) setTimeout(() => showSysAlert(data.sysAlert), 300);
+    
     if (data.Mori) {
-    // 延迟一点执行，配合对话框弹出的节奏
-    setTimeout(() => {
-        handleMoriCommand(data.Mori);
-    }, 500);
-}
+        setTimeout(() => {
+            handleMoriCommand(data.Mori);
+        }, 500);
+    }
+
     // 决策三角形逻辑
-    const isLastItem = (dialogIndex === dialogData.length - 1);
+    const isLastItem = (typeof dialogIndex !== 'undefined' && typeof dialogData !== 'undefined' && dialogIndex === dialogData.length - 1);
     if (isLastItem && dialogTriangle) {
         dialogTriangle.classList.add("decision-active-triangle");
         dialogTriangle.onclick = (e) => {
             e.stopPropagation();
-            openDecisionModal(); 
+            openDecisionModal();
         };
     } else if (dialogTriangle) {
         dialogTriangle.classList.remove("decision-active-triangle");
         dialogTriangle.onclick = null;
     }
 }
-// 统一决策呼出逻辑
-
 
 function openDecisionModal() {
     const choiceBox = document.getElementById("choiceOverlay");
