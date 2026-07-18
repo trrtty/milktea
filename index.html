@@ -2047,7 +2047,7 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 300px;
+        max-width: 355px;
       }
 
       /* 聊天详情 */
@@ -10608,64 +10608,54 @@ function createDefaultLayer(dbItem, z) {
 }
 
 function openSimChatDetail(id) {
-  notificationState.unreadChats = notificationState.unreadChats.filter(id => id !== id && id !== chatData.name);
-saveNotificationState(); // 保存状态
-updateRedDotUI();       // 刷新总入口红点
-        const chatData = phoneChatDB[id]; // 直接根据 ID 取对象
-        currentChatId = id;
+    const chatData = phoneChatDB[id]; // 必须先定义数据
+    if (!chatData) return;
 
-        notificationState.unreadChats.delete(id);
-    notificationState.unreadChats.delete(chatData.name);
-    updateRedDotUI(); 
-        if (!chatData) return;
+    currentChatId = id;
 
-        document.getElementById("detail-name").innerText = chatData.name;
-        const bubbleBox = document.getElementById("sim-chat-bubbles");
-        bubbleBox.innerHTML = "";
+    // --- [核心修复：消除该联系人的红点] ---
+    // 过滤掉当前点击的这个 ID 和 名字
+    notificationState.unreadChats = notificationState.unreadChats.filter(item => item !== id && item !== chatData.name);
+    
+    saveNotificationState(); // 保存状态
+    updateRedDotUI();       // 刷新总入口和图标上的红点
+    
+    // 以下是原有的渲染逻辑
+    document.getElementById("detail-name").innerText = chatData.name;
+    const bubbleBox = document.getElementById("sim-chat-bubbles");
+    bubbleBox.innerHTML = "";
 
-        const customerAvatar = `${customerBaseUrl}${chatData.id}.JPG`;
+    const customerAvatar = `${customerBaseUrl}${chatData.id}.JPG`;
 
-        chatData.history.forEach((m) => {
-          if (m.type === "time") {
+    chatData.history.forEach((m) => {
+        if (m.type === "time") {
             const div = document.createElement("div");
             div.className = "chat-time-divider";
             div.innerText = m.text;
             bubbleBox.appendChild(div);
-          } else {
+        } else {
             const b = document.createElement("div");
             b.className = "bubble " + m.type;
-
             if (m.type === "received") {
-              // 左侧：使用顾客图片头像
-              b.innerHTML = `
-        <div class="bubble-avatar" onclick="jumpToDossierFromChat('${chatData.id}')" style="cursor:pointer;">
-            <img src="${customerAvatar}">
-        </div>
-        <div class="bubble-content">${m.text}</div>
-    `;
+                b.innerHTML = `
+                    <div class="bubble-avatar" onclick="jumpToDossierFromChat('${chatData.id}')" style="cursor:pointer;">
+                        <img src="${customerAvatar}">
+                    </div>
+                    <div class="bubble-content">${m.text}</div>`;
             } else {
-              // 右侧：使用 user_avatar 类 (morichat 风格)
-              b.innerHTML = `
+                b.innerHTML = `
                     <div class="user_avatar"></div>
-                    <div class="bubble-content">${m.text}</div>
-                `;
+                    <div class="bubble-content">${m.text}</div>`;
             }
             bubbleBox.appendChild(b);
-          }
-        });
-
-        navigateToPhone("chat-detail");
-        setTimeout(() => {
-        const bubbleBox = document.getElementById("sim-chat-bubbles");
-        if (bubbleBox) {
-            bubbleBox.scrollTop = bubbleBox.scrollHeight;
         }
-  
-  
-    }, 50); 
-    
-    }
+    });
 
+    navigateToPhone("chat-detail");
+    setTimeout(() => {
+        if (bubbleBox) bubbleBox.scrollTop = bubbleBox.scrollHeight;
+    }, 50); 
+}
       // 注入初始化逻辑
 
       function jumpToDossierFromChat(id) {
