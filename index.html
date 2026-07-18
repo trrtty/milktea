@@ -450,8 +450,26 @@
         border-radius: 25px;
         border: 2px solid #eee;
         display: flex;
-        flex-direction: column; /* 改为上下排列更有张力 */
+        flex-direction: column;
         gap: 10px;
+        position: relative;
+        transition: all 0.2s;
+      }
+      .stat-mini-card:hover {
+        border-color: #ff6b81;
+        background: #fff5f6;
+        transform: translateY(-2px);
+      }
+      /* 右上角加一个微小的加号图标提示升级 */
+      .stat-mini-card::after {
+        content: "+";
+        position: absolute;
+        top: 10px;
+        right: 15px;
+        font-size: 24px;
+        color: #ff6b81;
+        font-weight: bold;
+        opacity: 0.3;
       }
       .stat-mini-label {
         color: #999;
@@ -4421,7 +4439,8 @@
               </div>
               <div style="color: #888; font-size: 18px; margin-top: 10px">
                 <i class="fa-solid fa-location-dot"></i>
-                <span id="admin-address">--</span>
+                <input type="text" id="admin-address-input" value="" onchange="syncShopAddress(this.value)" 
+                style="font-size: 18px; color: #888; border: none; border-bottom: 1px dashed #ccc; background: transparent; outline: none; width: 80%;" />
               </div>
               <div class="admin-xp-box">
                 <div class="xp-text">
@@ -5435,7 +5454,7 @@
           <!-- 5. 查看手机 -->
           <button class="nav-button" onclick="openLayer('layer-phone')">
             <img src="https://files.catbox.moe/7nbo56.png" alt="查看手机" />
-            <span>修复对话查看手机</span>
+            <span>玩手机</span>
           </button>
         </div>
         <div id="sysAlertOverlay" class="sys-alert-overlay">
@@ -5999,9 +6018,11 @@ function queueTavernMessage(text) {
     updateSyncButtonUI();
 }
 
-/**
- * 更新同步按钮的状态
- */
+// 获取当前游戏内的时间戳字符串 (格式：2026-春-白天)
+function getGameTimeStamp() {
+    if (typeof worldConfig === 'undefined') return "未知时间";
+    return `${worldConfig.year}-${worldConfig.season}-${worldConfig.time}`;
+}
 function updateSyncButtonUI() {
     const btn = document.getElementById("global-sync-btn");
     const badge = document.getElementById("sync-count-badge");
@@ -11626,7 +11647,7 @@ const myShopName = shopConfig.identity.name;
         document.getElementById("admin-lvl").innerText = s.identity.level;
         document.getElementById("admin-reputation").innerText =
           s.identity.reputation;
-        document.getElementById("admin-address").innerText = s.identity.address;
+          document.getElementById("admin-address-input").value = s.identity.address; 
         document.getElementById("admin-date").innerText =
           s.identity.establishedDate;
 
@@ -11641,7 +11662,31 @@ const myShopName = shopConfig.identity.name;
         document.getElementById("stat-hyg").innerText = s.stats.hygiene;
         document.getElementById("stat-srv").innerText = s.stats.service;
         document.getElementById("stat-wait").innerText = s.stats.avgWaitTime;
+// 2. 经营指标渲染 (核心数值) - 增加点击提示和点击事件
+const statPop = document.getElementById("stat-pop");
+        const statHyg = document.getElementById("stat-hyg");
+        const statSrv = document.getElementById("stat-srv");
+        const statWait = document.getElementById("stat-wait");
 
+        statPop.innerText = s.stats.popularity;
+        statPop.parentElement.onclick = () => upgradeMetric('popularity');
+        statPop.parentElement.style.cursor = 'pointer';
+        statPop.parentElement.title = "点击花钱提升知名度";
+
+        statHyg.innerText = s.stats.hygiene;
+        statHyg.parentElement.onclick = () => upgradeMetric('hygiene');
+        statHyg.parentElement.style.cursor = 'pointer';
+        statHyg.parentElement.title = "点击花钱进行大扫除";
+
+        statSrv.innerText = s.stats.service;
+        statSrv.parentElement.onclick = () => upgradeMetric('service');
+        statSrv.parentElement.style.cursor = 'pointer';
+        statSrv.parentElement.title = "点击花钱培训员工";
+
+        statWait.innerText = s.stats.avgWaitTime;
+        statWait.parentElement.onclick = () => upgradeMetric('avgWaitTime');
+        statWait.parentElement.style.cursor = 'pointer';
+        statWait.parentElement.title = "点击花钱升级设备缩短时间";
         // 3. 经营指标渲染 (资产/基础数据)
         document.getElementById("stat-rent").innerText =
           "¥ " + s.stats.dailyRent;
@@ -11715,17 +11760,6 @@ const myShopName = shopConfig.identity.name;
         });
       }
 
-      // 模拟购买市场 Buff 逻辑
-      function buyMarketBuff(buffId) {
-        const item = shopConfig.buffMarket.find((i) => i.id === buffId);
-        if (confirm(`确定要花费 ¥${item.cost} 购买 "${item.name}" 吗？`)) {
-          // 逻辑：将其压入 activeEffects 并扣钱
-          showSysAlert(`✅ 购买成功！${item.name} 已激活。`);
-          // 实际上这里应该有更复杂的逻辑，比如检查是否已存在同类 Buff
-        }
-      }
-      // 同步名字修改
-      // --- 修复：同步店铺名称的显示 ---
 
       // 1. 数据更新函数 (给输入框用的)
       function syncShopName(newName) {
@@ -12067,6 +12101,8 @@ async function buyMarketBuff(buffId) {
             };
             
             shopConfig.activeEffects.push(newEffect);
+            queueTavernMessage(`(管理决策): 从增益商店购买了经营增益效果【${item.name}】(持续${item.duration}天)，效果为：${item.effect}。`);
+
 
             showSysAlert(`✅ 购买成功！\n「${item.name}」已开始生效。`);
             renderShopAdmin(); // 刷新管理界面
@@ -13437,7 +13473,7 @@ async function handleMoriCommand(command) {
             const dateStr = `${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
             
             shopFinancials.records.unshift({
-                date: dateStr,
+                date: getGameTimeStamp(),
                 item: "未知大额资金流入", // 账单里显示的明细
                 amount: amount,
                 type: "income"
@@ -14235,6 +14271,133 @@ function syncSettingsUI() {
     document.querySelectorAll('[id^="diff-opt-"]').forEach(c => c.classList.remove('active'));
     const activeDiffEl = document.getElementById(`diff-opt-${currentDiff}`);
     if (activeDiffEl) activeDiffEl.classList.add('active');
+}
+
+/**
+ * 提升经营指标
+ * @param {string} type - 指标类型
+ */
+ async function upgradeMetric(type) {
+    const upgradeConfig = {
+        popularity: { name: '买广告位推广', cost: 5000, add: 5 },
+        hygiene: { name: '聘请专业深清', cost: 3000, add: 10 },
+        service: { name: '全员星级培训', cost: 4000, add: 8 },
+        avgWaitTime: { name: '升级出餐设备', cost: 6000, add: -1 } // 出餐时间是越小越好
+    };
+
+    const item = upgradeConfig[type];
+    if (!item) return;
+
+    // 1. 余额检查
+    if (shopFinancials.currentBalance < item.cost) {
+        showSysAlert(`资金不足！需要 ¥${item.cost} 才能执行 [${item.name}]。`);
+        return;
+    }
+
+    // 2. 弹出确认 (使用系统的 confirm)
+    if (!confirm(`确定花费 ¥${item.cost} 进行 [${item.name}] 吗？\n预计效果：${item.add > 0 ? '+' : ''}${item.add} 指标值`)) {
+        return;
+    }
+
+    // 3. 执行扣费与记账
+    shopFinancials.currentBalance -= item.cost;
+    shopFinancials.records.unshift({
+        date: getGameTimeStamp(), // <--- 使用游戏时间
+        item: `经营优化: ${item.name}`,
+        amount: -item.cost,
+        type: 'expense'
+    });
+
+    // 4. 更新数值
+    if (type === 'avgWaitTime') {
+        let current = parseInt(shopConfig.stats.avgWaitTime) || 10;
+        shopConfig.stats.avgWaitTime = Math.max(1, current + item.add) + "min";
+    } else {
+        shopConfig.stats[type] = Math.min(100, shopConfig.stats[type] + item.add);
+    }
+
+    // 5. 同步 UI 与存档
+    syncGlobalBalance();
+    renderShopAdmin();
+    await saveShopDataToMvu();
+    
+    showSysAlert(`✨ ${item.name} 完成！\n店铺指标已得到提升。`);
+}
+
+
+// 同步店名
+async function syncShopName(newName) {
+    if (!newName || newName.trim() === "") return;
+    const oldName = shopConfig.identity.name;
+    if (oldName === newName) return;
+
+    shopConfig.identity.name = newName;
+    if (phoneShopDB[oldName]) {
+        phoneShopDB[newName] = JSON.parse(JSON.stringify(phoneShopDB[oldName]));
+        delete phoneShopDB[oldName];
+    }
+
+    // --- 核心修改：加入同步决策 ---
+    queueTavernMessage(`(管理决策): 店铺正式更名为【${newName}】。`);
+    
+    renderShopNameUI(); 
+    await saveShopDataToMvu();
+}
+
+// 同步地址 (新增函数)
+async function syncShopAddress(newAddress) {
+    if (!newAddress) return;
+    shopConfig.identity.address = newAddress;
+    
+    // --- 核心修改：加入同步决策 ---
+    queueTavernMessage(`(管理决策): 店铺地址变更/搬迁至【${newAddress}】。`);
+    
+    await saveShopDataToMvu();
+    console.log("店铺地址已更新:", newAddress);
+}
+
+async function upgradeMetric(type) {
+    const upgradeConfig = {
+        popularity: { name: '广告推广', cost: 5000, add: 5, label: '知名度' },
+        hygiene: { name: '专业深清', cost: 3000, add: 10, label: '卫生值' },
+        service: { name: '员工培训', cost: 4000, add: 8, label: '服务质量' },
+        avgWaitTime: { name: '设备升级', cost: 6000, add: -1, label: '出餐速度' }
+    };
+
+    const item = upgradeConfig[type];
+    if (!item) return;
+
+    if (shopFinancials.currentBalance < item.cost) {
+        showSysAlert(`资金不足！`);
+        return;
+    }
+
+    if (!confirm(`确定花费 ¥${item.cost} 进行 [${item.name}] 吗？`)) return;
+
+    // 执行扣费与记账
+    shopFinancials.currentBalance -= item.cost;
+    shopFinancials.records.unshift({
+        date: getGameTimeStamp(),
+        item: `经营优化: ${item.name}`,
+        amount: -item.cost,
+        type: 'expense'
+    });
+
+    // 更新数值
+    if (type === 'avgWaitTime') {
+        let current = parseInt(shopConfig.stats.avgWaitTime) || 10;
+        shopConfig.stats.avgWaitTime = Math.max(1, current + item.add) + "min";
+    } else {
+        shopConfig.stats[type] = Math.min(100, shopConfig.stats[type] + item.add);
+    }
+
+    // --- 核心修改：加入同步决策 ---
+    queueTavernMessage(`(管理决策): 投入 ¥${item.cost} 执行 [${item.name}]，提升了店铺的 [${item.label}]。`);
+
+    syncGlobalBalance();
+    renderShopAdmin();
+    await saveShopDataToMvu();
+    showSysAlert(`✨ 指标提升成功！`);
 }
 </script>
   </body>
