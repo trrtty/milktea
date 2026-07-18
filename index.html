@@ -4723,6 +4723,14 @@
             </button>
             <div class="popup-title">饮品研发室</div>
                 <!-- 新增：AI 生成切换勾选框 -->
+
+                <button onclick="randomizeIngredients()" 
+                style="background:#949f9f; color:white; border:none; padding:10px 20px; border-radius:20px; font-weight:bold; font-size:18px; cursor:pointer; margin-right:15px; display:flex; align-items:center; gap:5px; transition:0.2s;"
+                onmouseover="this.style.background='#7a8585'" 
+                onmouseout="this.style.background='#949f9f'">
+            <i class="fa-solid fa-dice"></i> 随机搭配
+        </button>
+    
     <div style="display: flex; align-items: center; gap: 8px; color: #8b4513; font-weight: bold; font-size: 18px; cursor: pointer;">
       <input type="checkbox" id="ai-gen-toggle" style="width: 25px; height: 25px; accent-color: #8b4513; cursor: pointer;">
       <label for="ai-gen-toggle" style="cursor: pointer; user-select: none;">AI 协助命名</label>
@@ -5554,7 +5562,7 @@
       
           <!-- 文本内容：z-index 设为 5，浮在球上面 -->
           <div style="position: relative; z-index: 5; text-align: center; pointer-events: none;">
-              <div class="loading-text" style="margin-top: 300px; font-size: 28px; color: #8b4513; font-weight: 900;">正在通过食客评审...</div>
+              <div class="loading-text" style="margin-top: 300px; font-size: 28px; color: #8b4513; font-weight: 900;">正在同步店长决策...</div>
               <div id="responseTimer" style="margin-top: 15px; color: #ff6b81; font-weight: bold; font-size: 22px;">已响应: 0秒</div>
               <div class="loading-tips-wrap" style="margin-top: 50px;">
                   <div class="tip-label">小贴士 Tips</div>
@@ -6055,7 +6063,10 @@ async function flushTavernBuffer() {
         // --- 【核心：生成回复】 ---
         const aiRawResponse = await TavernHelper.generate({ user_input: promptText });
         if (!aiRawResponse) throw new Error("AI 返回内容为空");
-        
+        if (!/<dialogtext>/i.test(aiRawResponse)) {
+            // 如果没检测到 <dialogtext> 标签，判定为格式错误
+            throw new Error("AI 响应格式错误：未检测到剧情标签 <dialogtext>。请尝试再次点击同步按钮。");
+        }
 
         // --- 提取剧情数据 ---
         const dialogRegex = new RegExp("<dialogtext>\\s*([\\s\\S]*?)\\s*</dialogtext>", "i");
@@ -10040,8 +10051,23 @@ let tStars = Math.max(0, 5 - balancePenalty / 5).toFixed(1);
             // --- AI 协助模式：直接关闭，回大堂 ---
             closeLayer('layer-dev');
             
-            // 压入同步缓存
-            const researchMessage = `用 ${ingredientNames.join('、')} 研发奶茶（品质${qStars}星，口感${tStars}星）`;
+            const ingredientDetails = sortedObjects.map(item => ({
+        name: item.name,
+        cost: item.cost,
+        season: item.season,
+        tags: item.coreTags ? { [item.coreTags.n]: item.coreTags.l } : null,
+        subtag: item.subTags ? { [item.subTags.n]: item.subTags.l } : null,
+        desc: item.desc
+    }));
+
+    // 2. 按照你要求的格式构建最终发送给 AI 的消息
+    const researchMessage = `用 ${ingredientNames.join('、')} 研发奶茶
+<thorough>
+${JSON.stringify(ingredientDetails, null, 2)}
+（品质${qStars}星，口感${tStars}星）
+</thorough>`;
+
+
             queueTavernMessage(researchMessage); 
 
             showSysAlert("🥤 研发蓝图已准备好！\n请点击右上角【同步决策】通知评审团。\n(评审完后将自动开启精修界面)");
@@ -10661,12 +10687,13 @@ function renderSimTaskList() {
         const photoUrl = `${customerBaseUrl}${task.id}.JPG`; // 头像依然用内部 id 匹配
         const card = document.createElement("div");
         card.className = "task-card";
+        // 1. 处理要求 (Array 中的每项都支持 |)
         const constraintsHTML = task.constraints.map(c => 
-            `<div class="task-req-item">${c.replace(/\|/g, '<br>')}</div>`
+            `<div class="task-req-item">${c.split('|').join('<br>')}</div>`
         ).join("");
 
-        // 处理 reward 字符串，支持 | 换行
-        const rewardHTML = task.reward.replace(/\|/g, '<br>');
+        // 2. 处理奖励 (String 支持 |)
+        const rewardHTML = task.reward.split('|').join('<br>');
         card.innerHTML = `
             <div class="task-header">
                 <img src="${photoUrl}" class="task-photo" onerror="this.src='https://files.catbox.moe/gonxin.JPG'">
@@ -10677,10 +10704,10 @@ function renderSimTaskList() {
             </div>
             <div class="task-req-box">
                 <span class="task-req-title">要求：</span>
-                ${task.constraints.map((c) => `<div class="task-req-item">${c}</div>`).join("")}
+ ${constraintsHTML}
             </div>
             <div class="task-footer">
-                <div class="task-reward">${task.reward}</div>
+               <div class="task-reward" style="line-height:1.4;">${rewardHTML}</div>
         
                 <button class="btn-submit-task" onclick="goSubmitTask('${dbKey}')">提交奶茶</button>
             </div>
@@ -10889,12 +10916,12 @@ function renderSimMatchList() {
 
             <div class="task-req-box" style="border: 1px solid #eee; background: #fffafb; margin-top:20px;">
                 <span class="task-req-title" style="color:#ff6b88;">参赛要求：</span>
-                <div class="task-req-item" style="color:#555;">${match.requirement}</div>
+<div class="task-req-item" style="color:#555; line-height:1.4;">${reqHTML}</div>
             </div>
 
             <div class="task-footer" style="margin-top:25px; padding-top:20px; border-top: 1px solid #f5f5f5;">
                 <div class="task-reward" style="font-size:20px; color:#D2691E;">
-                    <span style="font-weight:900;">奖励：</span>${match.reward}
+                    <span style="font-weight:900;">最终奖励：</span><br>${rewardHTML}
                 </div>
                 <!-- 注意：这里的参数改成了 title -->
                 <button class="btn-submit-task" 
@@ -13683,17 +13710,17 @@ function toggleFullScreen() {
     // 2. 关键修复：显式查询从 0 到最后一楼的所有消息，确保不漏掉旧楼层
     const allMsgs = TavernHelper.getChatMessages(`0-${lastMid}`);
     
-    console.log(`🔍 [深度扫描] 总消息数: ${allMsgs.length}，正在筛选 <sum> 标签...`);
+    console.log(`🔍 [深度扫描] 总消息数: ${allMsgs.length}，正在筛选 <summary> 标签...`);
 
-    // 3. 过滤出所有带 <sum> 标签的 AI 消息
+    // 3. 过滤出所有带 <summary> 标签的 AI 消息
     const assistantSumMsgs = allMsgs.filter(m => 
         m.role === 'assistant' && 
         m.message && 
-        /<sum>[\s\S]*?<\/sum>/i.test(m.message)
+        /<summary>[\s\S]*?<\/summary>/i.test(m.message)
     );
 
     if (assistantSumMsgs.length === 0) {
-        container.innerHTML = `<div style="text-align:center; padding:50px; color:#999;">漫长的历史中未发现剧情摘要（<sum>）。</div>`;
+        container.innerHTML = `<div style="text-align:center; padding:50px; color:#999;">漫长的历史中未发现剧情摘要（<summary>）。</div>`;
         return;
     }
 
@@ -13770,13 +13797,13 @@ function toggleFullScreen() {
  * 摘要解析
  */
 /**
- * 摘要解析：精准提取消息中最后一对 <sum> 标签的内容
+ * 摘要解析：精准提取消息中最后一对 <summary> 标签的内容
  */
  function parseSumFromRaw(text) {
     if (!text) return "未命名的剧情点";
 
-    // 使用全局匹配模式 'g' 来寻找所有的 <sum> 标签
-    const regex = /<sum>([\s\S]*?)<\/sum>/gi;
+    // 使用全局匹配模式 'g' 来寻找所有的 <summary> 标签
+    const regex = /<summary>([\s\S]*?)<\/summary>/gi;
     const matches = Array.from(text.matchAll(regex));
 
     if (matches.length > 0) {
@@ -13813,32 +13840,36 @@ function confirmBranch(mid, summary) {
 }
 
 
- async function handleRegenerateTurn() {
-    // 1. 显示加载动画
-    const loader = document.getElementById("devLoading");
-    if (loader) {
-        loader.style.display = "flex";
-        document.querySelector("#devLoading .loading-text").innerText = "正在干扰时间线，重塑因果...";
+async function handleRegenerateTurn() {
+    // 1. 防抖检查
+    if (isSyncing) return;
+    isSyncing = true;
+
+    // 2. 启动加载状态（显示弹球和计时）
+    startLoadingState();
+    const loadingTextEl = document.querySelector("#devLoading .loading-text");
+    if (loadingTextEl) {
+        loadingTextEl.innerText = "正在干扰时间线，重塑因果...";
     }
 
     try {
-        // 2. 获取最后一楼（AI回复的那一楼）
+        // 3. 获取最后一楼（AI回复的那一楼）
         const lastMid = TavernHelper.getLastMessageId();
         const msgs = TavernHelper.getChatMessages(lastMid);
         
         if (!msgs || msgs.length === 0 || msgs[0].role !== 'assistant') {
-            alert("❌ 无法重来：最后一楼不是 AI 的回复，或者找不到消息。");
-            if (loader) loader.style.display = "none";
+            showSysAlert("❌ 无法重来：最后一楼不是 AI 的回复。");
+            stopLoadingState();
             return;
         }
 
-        // 3. 寻找上一楼（User指令的那一楼）
+        // 4. 寻找上一楼（User指令的那一楼）
         const userMid = lastMid - 1;
         const userMsgs = TavernHelper.getChatMessages(userMid);
         
         if (!userMsgs || userMsgs.length === 0 || userMsgs[0].role !== 'user') {
-            alert("❌ 溯源失败：找不到原始指令。");
-            if (loader) loader.style.display = "none";
+            showSysAlert("❌ 溯源失败：找不到原始指令。");
+            stopLoadingState();
             return;
         }
 
@@ -13848,54 +13879,66 @@ function confirmBranch(mid, summary) {
 
         console.log(`🔄 执行重roll。删除 AI 楼层: ${lastMid}`);
 
-        // 4. 执行物理删除（删除酒馆里那条不想要的 AI 回复）
+        // 5. 执行物理删除
         if (typeof window.deleteChatMessages === 'function') {
             await window.deleteChatMessages([lastMid], {});
         }
 
-        // 5. 让 AI 重新生成
+        // 6. 让 AI 重新生成
         const aiRawResponse = await TavernHelper.generate({ user_input: originalPrompt });
         
-        if (!aiRawResponse || !aiRawResponse.includes('<content>')) {
-            alert("❌ AI 响应格式错误，请手动在酒馆重试。");
-            if (loader) loader.style.display = "none";
+        if (!aiRawResponse) {
+            showSysAlert("❌ AI 响应为空，请手动重试。");
+            stopLoadingState();
             return;
         }
 
-        // 6. 解析新的变量变动 (MVU)
-        let updatedData = previousData;
+        // 7. 解析新的变量变动 (MVU)
+        let updatedStatData = previousData;
         if (typeof Mvu?.parseMessage === 'function') {
-            updatedData = await Mvu.parseMessage(aiRawResponse, previousData || { stat_data: {} });
+            const parsedData = await Mvu.parseMessage(aiRawResponse, previousData || { stat_data: {} });
+            if (parsedData) updatedStatData = parsedData;
         }
 
-        // 7. 在酒馆创建新的 AI 楼层
+        // 8. 解析剧情数据
+        const dialogRegex = new RegExp("<dialogtext>\\s*([\\s\\S]*?)\\s*</dialogtext>", "i");
+        const dialogMatch = aiRawResponse.match(dialogRegex);
+        let newDialogData = [];
+        if (dialogMatch) {
+            let jsonContent = dialogMatch[1].trim().replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
+            try {
+                newDialogData = new Function(`return ${jsonContent}`)();
+            } catch (e) { console.error("剧情解析失败"); }
+        }
+
+        // 9. 在酒馆创建新的 AI 楼层
         const newMid = await TavernHelper.createChatMessages(
-            [{ role: 'assistant', message: aiRawResponse, data: updatedData || void 0 }],
+            [{ role: 'assistant', message: aiRawResponse, data: updatedStatData || void 0 }],
             { refresh: 'none' }
         );
 
-        // 8. 刷新你的界面 UI
+        // 10. 刷新你的界面 UI
         window.lastProcessedId = newMid;
         await reloadGameData(newMid);
         
-        // 重新加载剧情对白
-        const newDialog = parseDialogTextFromRaw(aiRawResponse);
-        if (newDialog.length > 0) {
-            dialogData = newDialog;
+        if (newDialogData.length > 0) {
+            dialogData = newDialogData;
             dialogIndex = -1;
-            nextDialog();
+            isStoryFinished = false;
         }
 
-        if (loader) loader.style.display = "none";
         console.log("✅ 时间回溯成功！");
+        nextDialog();
 
     } catch (e) {
         console.error("❌ 重roll失败:", e);
-        if (loader) loader.style.display = "none";
-        alert("系统异常：时间流向发生了紊乱，请刷新页面。");
+        showSysAlert("系统异常：时间流向发生了紊乱。");
+    } finally {
+        // 11. 彻底收尾：关闭 Loading，恢复按钮
+        stopLoadingState();
+        isSyncing = false;
     }
 }
-
 
 // 修改：Tips 轮换逻辑（增加初始显示）
 function startTipRotation() {
@@ -14023,7 +14066,54 @@ function stopLoadingState() {
     isSyncing = false; 
 }
 
+/**
+ * 研发室：随机选取 5-8 个原料
+ */
+ function randomizeIngredients() {
+    // 1. 获取所有当前已解锁的非固定原料
+    const pool = Object.values(unlockedIngredients).filter(i => !i.isFixed);
+    
+    if (pool.length < 5) {
+        showSysAlert("库房里的原料种类太少啦（不足5种），快去多解锁一些吧！");
+        return;
+    }
 
+    // 2. 清空当前所有选中（保留固定层）
+    selectedIngredients.clear();
+    ingredientsDB.filter(i => i.isFixed).forEach(i => selectedIngredients.add(i.id));
+
+    // 3. 决定随机抽取的数量 (5-8)
+    const targetCount = Math.floor(Math.random() * 4) + 5; // 产生 5, 6, 7, 8 中的一个
+    const actualCount = Math.min(pool.length, targetCount);
+
+    // 4. 洗牌算法抽取
+    const shuffled = [...pool].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, actualCount);
+
+    // 5. 注入选中集合并更新 UI
+    selected.forEach(item => {
+        selectedIngredients.add(item.id);
+    });
+
+    // 6. 刷新按钮的高亮状态
+    document.querySelectorAll(".ingredient-btn").forEach(btn => {
+        const id = btn.id.replace("btn-", "");
+        if (selectedIngredients.has(id)) {
+            btn.classList.add("active");
+        } else {
+            btn.classList.remove("active");
+        }
+    });
+
+    // 7. 更新画布和详情预览（显示抽中的第一个原料的信息）
+    updateCanvas();
+    if (selected.length > 0) {
+        showIngredientInfo(selected[0].id);
+    }
+
+    // 8. 简单的交互反馈
+    console.log(`🎲 随机灵感：选取了 ${actualCount} 种原料组合。`);
+}
 </script>
   </body>
 </html>
