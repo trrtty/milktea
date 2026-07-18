@@ -33,42 +33,7 @@
         -webkit-user-select: none; /* 兼容 Chrome/Safari */
         cursor: default; /* 强制默认为箭头，而不是文字输入光标 */
       }
-/* 红点基础样式 */
-.dot-indicator {
-    position: absolute;
-    background: #ff4757;
-    color: white;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: 2px solid white;
-    z-index: 100;
-    pointer-events: none;
-    display: none; /* 默认隐藏 */
-}
 
-/* 底部导航栏手机按钮的红点 */
-.nav-button .dot-indicator {
-    top: 25px;
-    right: -5px;
-}
-
-/* 手机主屏幕 App 图标上的红点 */
-.app-item .dot-indicator {
-    top: 25px;
-    right: 35px;
-    width: 25px;
-    height: 25px;
-}
-
-/* 聊天列表联系人头像上的红点 */
-.chat-list-item .item-avatar-wrap {
-    position: relative;
-}
-.chat-list-item .dot-indicator {
-    top: -5px;
-    right: -5px;
-}
       #editor-layer-list {
     display: flex;
     gap: 20px; /* 增加间距 */
@@ -2047,7 +2012,7 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 355px;
+        max-width: 300px;
       }
 
       /* 聊天详情 */
@@ -4018,7 +3983,7 @@
 /* Markdown 样式渲染 */
 .novel-body-md { font-size: 26px; }
 .novel-body-md p { margin-bottom: 25px; }
-.novel-body-md strong { color: #8b4513; font-weight: 700; }
+.novel-body-md strong { color: #8b4513; font-weight: 900; }
 .novel-body-md em { font-style: italic; opacity: 0.8; }
 .novel-body-md blockquote {
     border-left: 6px solid #deb887;
@@ -5965,16 +5930,6 @@ let bounceData = {
     w: 240, h: 240, 
     friction: 0.985 // 速度衰减系数，越小停得越快
 };
-
-// --- [红点系统：带本地记忆功能] ---
-let notificationState = JSON.parse(localStorage.getItem('milktea_notifications')) || {
-    hasForumUpdate: false,
-    unreadChats: [] 
-};
-
-function saveNotificationState() {
-    localStorage.setItem('milktea_notifications', JSON.stringify(notificationState));
-}
       const TavernHelper = {
     async createChatMessages(msgs, ops) {
         return await window.createChatMessages(msgs, ops);
@@ -8322,8 +8277,6 @@ console.log("👤 玩家身份已识别:", playerName);
     // 默认打开手机主页（如果没有特殊场景）
     const isAnyLayerOpen = Array.from(document.querySelectorAll('.popup-layer')).some(l => l.style.display === 'flex');
     if (!isAnyLayerOpen) navigateToPhone("home");
-
-    updateRedDotUI(); 
 }
 
 // --- 立即执行初始化 ---
@@ -10575,70 +10528,85 @@ function createDefaultLayer(dbItem, z) {
       }
 
       function renderSimChatList() {
-    const listContainer = document.getElementById("sim-chat-list");
-    listContainer.innerHTML = "";
+        const listContainer = document.getElementById("sim-chat-list");
+        listContainer.innerHTML = "";
 
-    Object.values(phoneChatDB).forEach((chat) => {
-        const item = document.createElement("div");
-        item.className = "chat-list-item";
-        const avatarPath = `${customerBaseUrl}${chat.id}.JPG`;
-        
-        // 【核心】检查当前联系人是否有未读消息
-        const isUnread = notificationState.unreadChats.includes(chat.id) || notificationState.unreadChats.includes(chat.name);
+        // 遍历对象
+        Object.values(phoneChatDB).forEach((chat) => {
+          const item = document.createElement("div");
+          item.className = "chat-list-item";
+          // 复用顾客档案里的头像路径
+          const avatarPath = `${customerBaseUrl}${chat.id}.JPG`;
 
-        item.onclick = () => openSimChatDetail(chat.id);
-        item.innerHTML = `
-            <div class="item-avatar-wrap" style="position:relative;">
-                <img src="${avatarPath}" class="item-avatar">
-                <!-- 红点 DOM -->
-                <div class="dot-indicator" style="display:${isUnread ? 'block' : 'none'}; top:0; right:0;"></div>
-            </div>
+          item.onclick = () => openSimChatDetail(chat.id);
+          item.innerHTML = `
+            <img src="${avatarPath}" class="item-avatar">
             <div class="item-main">
                 <div class="item-row1">
                     <span class="item-name">${chat.name}</span>
                     <span class="item-time">${chat.time}</span>
                 </div>
-                <div class="item-msg" style="${isUnread ? 'font-weight:900; color:#333;' : ''}">${chat.lastMsg}</div>
+                <div class="item-msg">${chat.lastMsg}</div>
             </div>
         `;
-        listContainer.appendChild(item);
-    });
-}
+          listContainer.appendChild(item);
+        });
+      }
 
-function openSimChatDetail(id) {
-    const chatData = phoneChatDB[id];
-    if (!chatData) return;
-    currentChatId = id;
+      function openSimChatDetail(id) {
+        const chatData = phoneChatDB[id]; // 直接根据 ID 取对象
+        currentChatId = id;
+        if (!chatData) return;
 
-    // --- 核心修复：消除该联系人的红点 ---
-    // 过滤掉所有匹配 ID 或 名字的未读记录
-    notificationState.unreadChats = notificationState.unreadChats.filter(name => name !== id && name !== chatData.name);
-    
-    saveNotificationState();
-    updateRedDotUI(); 
+        document.getElementById("detail-name").innerText = chatData.name;
+        const bubbleBox = document.getElementById("sim-chat-bubbles");
+        bubbleBox.innerHTML = "";
 
-    // UI 渲染逻辑
-    document.getElementById("detail-name").innerText = chatData.name;
-    const bubbleBox = document.getElementById("sim-chat-bubbles");
-    bubbleBox.innerHTML = "";
-    const customerAvatar = `${customerBaseUrl}${chatData.id}.JPG`;
+        const customerAvatar = `${customerBaseUrl}${chatData.id}.JPG`;
 
-    chatData.history.forEach((m) => {
-        const b = document.createElement("div");
-        b.className = "bubble " + (m.type === "time" ? "chat-time-divider" : m.type);
-        if (m.type === "received") {
-            b.innerHTML = `<div class="bubble-avatar"><img src="${customerAvatar}"></div><div class="bubble-content">${m.text}</div>`;
-        } else if (m.type === "sent") {
-            b.innerHTML = `<div class="user_avatar"></div><div class="bubble-content">${m.text}</div>`;
-        } else {
-            b.innerText = m.text;
+        chatData.history.forEach((m) => {
+          if (m.type === "time") {
+            const div = document.createElement("div");
+            div.className = "chat-time-divider";
+            div.innerText = m.text;
+            bubbleBox.appendChild(div);
+          } else {
+            const b = document.createElement("div");
+            b.className = "bubble " + m.type;
+
+            if (m.type === "received") {
+              // 左侧：使用顾客图片头像
+              b.innerHTML = `
+        <div class="bubble-avatar" onclick="jumpToDossierFromChat('${chatData.id}')" style="cursor:pointer;">
+            <img src="${customerAvatar}">
+        </div>
+        <div class="bubble-content">${m.text}</div>
+    `;
+            } else {
+              // 右侧：使用 user_avatar 类 (morichat 风格)
+              b.innerHTML = `
+                    <div class="user_avatar"></div>
+                    <div class="bubble-content">${m.text}</div>
+                `;
+            }
+            bubbleBox.appendChild(b);
+          }
+        });
+
+        navigateToPhone("chat-detail");
+        setTimeout(() => {
+        const bubbleBox = document.getElementById("sim-chat-bubbles");
+        if (bubbleBox) {
+            bubbleBox.scrollTop = bubbleBox.scrollHeight;
         }
-        bubbleBox.appendChild(b);
-    });
+  
+  
+    }, 50); 
+    
+    }
 
-    navigateToPhone("chat-detail");
-    setTimeout(() => { if (bubbleBox) bubbleBox.scrollTop = bubbleBox.scrollHeight; }, 50); 
-}
+      // 注入初始化逻辑
+
       function jumpToDossierFromChat(id) {
         dossierBackTarget = "chat"; // 标记标记：我是从聊天界面跳过来的
         openLayer("layer-customer"); // 打开档案层
@@ -10950,7 +10918,7 @@ function renderSimMatchList() {
                 <i class="fa-solid fa-xmark"></i>
             </div>
 
-           
+
             <h3 class="match-title">${title}</h3>
             
 
@@ -12928,8 +12896,6 @@ function renderForumList() {
     const spacer = document.createElement("div");
     spacer.style.height = "120px";
     container.appendChild(spacer);
-    notificationState.hasForumUpdate = false; // 消除状态
-    updateRedDotUI(); // 刷新红点
 }
 function renderPostMedia(containerId, post) {
     const container = document.getElementById(containerId);
@@ -13629,58 +13595,57 @@ function getSelectedLayer() {
 }
 
 
-async function handleLLMResponse(messageId) {
+/**
+ * 处理 AI 生成完毕后的 Assistant 消息
+ */
+ async function handleLLMResponse(messageId) {
     try {
+        // 1. 获取消息内容
         const msgs = TavernHelper.getChatMessages(messageId);
         if (!msgs || msgs.length === 0) return;
         const rawText = msgs[0].message || '';
 
-        // --- 1. 红点指令解析 ---
-        const patchRegex = /<JSONPatch>([\s\S]*?)<\/JSONPatch>/i;
-        const patchMatch = rawText.match(patchRegex);
-        if (patchMatch) {
-            try {
-                const patches = JSON.parse(patchMatch[1].trim());
-                patches.forEach(p => {
-                    // 论坛红点
-                    if (p.path.includes("phoneForumDB")) {
-                        notificationState.hasForumUpdate = true;
-                    }
-                    // 私信红点
-                    if (p.path.includes("phoneChatDB")) {
-                        const parts = p.path.split('/');
-                        const contactKey = parts[2]; // 提取路径里的联系人名字
-                        if (contactKey && !notificationState.unreadChats.includes(contactKey)) {
-                            notificationState.unreadChats.push(contactKey);
-                        }
-                    }
-                });
-                saveNotificationState();
-                updateRedDotUI();
-            } catch (e) { console.error("JSONPatch解析失败", e); }
-        }
-
-        // --- 2. 剧情解析 ---
-        const dialogRegex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/i;
-        const dialogMatch = rawText.match(dialogRegex);
-        if (dialogMatch) {
-            let content = dialogMatch[1].trim().replace(/<!--[\s\S]*?-->/g, "");
+        // --- 步骤：提取 <dialogtext> ---
+        const regex = /<dialogtext>\s*([\s\S]*?)\s*<\/dialogtext>/i;
+        const match = rawText.match(regex);
+        
+        if (match) {
+            let content = match[1].trim();
+            content = content.replace(/<!--[\s\S]*?-->/g, ""); // 剔除注释
+            
+            // 提取 JSON 数组部分
             const start = content.indexOf('[');
             const end = content.lastIndexOf(']');
             if (start !== -1 && end !== -1) {
                 const jsonStr = content.substring(start, end + 1);
+                
+                // 更新全局剧情变量
                 dialogData = new Function(`return ${jsonStr}`)();
-                dialogIndex = -1;
+                dialogIndex = -1; // 重置进度
                 isStoryFinished = false; 
+                console.log("🎬 剧情数据已从楼层提取并更新");
             }
         }
 
+        // --- 步骤：解析变量 (MVU同步) ---
         await reloadGameData(messageId);
-        if (document.getElementById("devLoading")) document.getElementById("devLoading").style.display = "none";
+
+        // 2. 隐藏 Loading
+        const loader = document.getElementById("devLoading");
+        if (loader) loader.style.display = "none";
+
+        // 3. 自动开启第一条剧情对白
         nextDialog();
-    } catch (e) { console.error("AI回复处理失败", e); }
+
+    } catch (e) {
+        console.error("❌ 解析回复失败:", e);
+        document.getElementById("devLoading").style.display = "none";
+    }
 }
 
+/**
+ * 强制从 MVU 刷新经营数值
+ */
 async function reloadGameData(mid) {
     try {
         // 获取该楼层关联的变量快照
@@ -14242,42 +14207,6 @@ async function dismissPhoneMatch(matchTitle) {
         await saveShopDataToMvu();
     }
 }
-
-function updateRedDotUI() {
-    if (typeof notificationState === 'undefined') return;
-
-    const hasAnyUpdate = notificationState.hasForumUpdate || notificationState.unreadChats.length > 0;
-    
-    // 1. 底栏“查看手机”按钮 (查找包含 layer-phone 的按钮)
-    const phoneNavBtn = document.querySelector(".nav-button[onclick*='layer-phone']");
-    if (phoneNavBtn) {
-        let dot = phoneNavBtn.querySelector(".dot-indicator") || createDot(phoneNavBtn);
-        dot.style.display = hasAnyUpdate ? "block" : "none";
-    }
-
-    // 2. 手机桌面 - 消息列表图标
-    const chatApp = document.querySelector(".app-item[onclick*='chat-list']");
-    if (chatApp) {
-        let dot = chatApp.querySelector(".dot-indicator") || createDot(chatApp);
-        dot.style.display = notificationState.unreadChats.length > 0 ? "block" : "none";
-    }
-
-    // 3. 手机桌面 - 论坛图标
-    const forumApp = document.querySelector(".app-item[onclick*='forum']");
-    if (forumApp) {
-        let dot = forumApp.querySelector(".dot-indicator") || createDot(forumApp);
-        dot.style.display = notificationState.hasForumUpdate ? "block" : "none";
-    }
-}
-
-function createDot(parent) {
-    const dot = document.createElement("div");
-    dot.className = "dot-indicator";
-    parent.appendChild(dot);
-    return dot;
-}
-
-
 </script>
   </body>
 </html>
