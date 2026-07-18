@@ -5465,7 +5465,7 @@
           <!-- 5. 查看手机 -->
           <button class="nav-button" onclick="openLayer('layer-phone')">
             <img src="https://files.catbox.moe/7nbo56.png" alt="查看手机" />
-            <span>查看手机</span>
+            <span>手机</span>
           </button>
         </div>
         <div id="sysAlertOverlay" class="sys-alert-overlay">
@@ -14016,30 +14016,33 @@ function toggleFullScreen() {
 }
 
 /**
- * 强化版摘要解析：只找消息末尾、真正有效的最后一对标签
- */
-/**
- * 摘要解析：精准提取消息中最后一对 <summary> 标签的内容
+ * 终极防错版摘要解析：
+ * 1. 物理删除所有 <think> 块，防止 AI 思考逻辑干扰。
+ * 2. 精准定位最后一段摘要。
  */
  function parseSumFromRaw(text) {
     if (!text) return "未命名的剧情点";
 
-    // 1. 过滤掉 <think> 标签里的所有干扰内容
-    const cleanText = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+    // --- 第一步：物理隔离思考块 ---
+    // 无论 AI 在 think 里写了多少个 <summary>，全部抹除
+    let bodyText = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
 
-    // 2. 全局匹配所有的 summary 块
+    // --- 第二步：提取真摘要 ---
+    // 使用全局匹配 gi
     const regex = /<summary>([\s\S]*?)<\/summary>/gi;
-    const matches = Array.from(cleanText.matchAll(regex));
+    const matches = Array.from(bodyText.matchAll(regex));
 
     if (matches.length > 0) {
-        // 3. 拿到最后一个匹配项 [matches.length - 1]
+        // 拿到最后一对标签的内容
         let finalSummary = matches[matches.length - 1][1].trim();
         
-        // 4. 清理内部可能存在的 JSON 标签或注释
+        // --- 第三步：深度清理内容 ---
+        // 1. 剔除摘要内容中可能残留的 HTML 注释
         finalSummary = finalSummary.replace(/<!--[\s\S]*?-->/g, "");
-        finalSummary = finalSummary.replace(/<dialogtext>[\s\S]*?<\/dialogtext>/gi, "");
+        // 2. 剔除由于 AI 幻觉可能多包了一层的标签（如摘要里又写了 <UpdateVariable>）
+        finalSummary = finalSummary.replace(/<[\s\S]*?>/g, "");
         
-        // 5. 限制长度，防止卡片被撑得无限长
+        // --- 第四步：长度保护 ---
         if (finalSummary.length > 150) {
             finalSummary = finalSummary.substring(0, 150) + "...";
         }
@@ -14049,6 +14052,7 @@ function toggleFullScreen() {
 
     return "未命名的剧情点";
 }
+
 function confirmBranch(mid, summary) {
     if (confirm(`🕰️ 确定要回溯到此时间点吗？\n\n"${summary}"\n\n注意：这会创建一个新的对话分支。`)) {
         TavernHelper.executeCommand(`/branch-create ${mid}`);
