@@ -1395,7 +1395,7 @@
       }
       /* 大众点评列表页背景修正 */
       #page-review {
-        background: url("https://files..moe/0qg5ah.jpg") no-repeat center !important;
+        background: url("https://files.catbox.moe/0qg5ah.jpg") no-repeat center !important;
         background-size: cover !important;
       }
 /* 修复论坛配方图留白 */
@@ -13264,7 +13264,7 @@ function syncStoryUI(data) {
         setTimeout(() => {
             showItemPopup(
                 popupText, 
-                "https://raw.githubusercontent.com/trrtty/milktea/refs/heads/main/ingredient/钱.png", 
+                "https://raw.githubusercontent.com/trrtty/milktea/refs/heads/main/ingredient/钱.png", // 即使扣钱也可以沿用金币图，或者你有专属扣钱图
                 null, 
                 title
             );
@@ -14003,29 +14003,29 @@ function toggleFullScreen() {
     console.log(`✅ [深度扫描] 完成，找到 ${assistantSumMsgs.length} 个存档点`);
 }
 /**
- * 摘要解析
- */
-/**
- * 摘要解析：精准提取消息中最后一对 <summary> 标签的内容
+ * 摘要解析：精准提取消息中“最后一对” <summary> 标签的内容
  */
  function parseSumFromRaw(text) {
     if (!text) return "未命名的剧情点";
 
-    // 使用全局匹配模式 'g' 来寻找所有的 <summary> 标签
+    // 1. 使用全局匹配模式 'g' 寻找所有 summary 块
     const regex = /<summary>([\s\S]*?)<\/summary>/gi;
     const matches = Array.from(text.matchAll(regex));
 
+    // 2. 如果找到了匹配项
     if (matches.length > 0) {
-        // 取匹配数组中的最后一个元素 [matches.length - 1]
-        // [1] 代表取标签内部的括号内容（即摘要正文）
-        return matches[matches.length - 1][1].trim();
+        // [matches.length - 1] 确保拿取的是最后生成的那一个
+        // [1] 是正则表达式捕获组括号里的内容（即摘要正文）
+        let finalSummary = matches[matches.length - 1][1].trim();
+        
+        // 额外清理：剔除可能残留的 HTML 注释
+        finalSummary = finalSummary.replace(/<!--[\s\S]*?-->/g, "");
+        
+        return finalSummary;
     }
 
     return "未命名的剧情点";
 }
-/**
- * 分支跳转执行
- */
 function confirmBranch(mid, summary) {
     if (confirm(`🕰️ 确定要回溯到此时间点吗？\n\n"${summary}"\n\n注意：这会创建一个新的对话分支。`)) {
         TavernHelper.executeCommand(`/branch-create ${mid}`);
