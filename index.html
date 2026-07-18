@@ -5465,7 +5465,7 @@
           <!-- 5. 查看手机 -->
           <button class="nav-button" onclick="openLayer('layer-phone')">
             <img src="https://files.catbox.moe/7nbo56.png" alt="查看手机" />
-            <span>查看手机</span>
+            <span>手机</span>
           </button>
         </div>
         <div id="sysAlertOverlay" class="sys-alert-overlay">
@@ -8389,6 +8389,8 @@ console.log("👤 玩家身份已识别:", playerName);
     // 默认打开手机主页（如果没有特殊场景）
     const isAnyLayerOpen = Array.from(document.querySelectorAll('.popup-layer')).some(l => l.style.display === 'flex');
     if (!isAnyLayerOpen) navigateToPhone("home");
+
+    await processSceneQueue();
 }
 
 // --- 立即执行初始化 ---
