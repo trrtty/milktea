@@ -33,7 +33,37 @@
         -webkit-user-select: none; /* 兼容 Chrome/Safari */
         cursor: default; /* 强制默认为箭头，而不是文字输入光标 */
       }
+/* 红点基础样式 */
+.has-dot {
+    position: relative;
+}
 
+.has-dot::after {
+    content: "";
+    position: absolute;
+    top: 5px;
+    right: 15px;
+    width: 20px;
+    height: 20px;
+    background: #ff4757; /* 稍微鲜艳的红色 */
+    border: 3px solid white;
+    border-radius: 50%;
+    z-index: 100;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    animation: dotPulse 2s infinite;
+}
+
+/* 聊天列表项的红点稍微挪下位置 */
+.chat-list-item.has-dot::after {
+    top: 25px;
+    right: 30px;
+}
+
+@keyframes dotPulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7); }
+    70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(255, 71, 87, 0); }
+    100% { transform: scale(1); }
+}
       #editor-layer-list {
     display: flex;
     gap: 20px; /* 增加间距 */
@@ -5973,10 +6003,13 @@ let bounceData = {
 let tavernMessageBuffer = []; // 存储所有待发送的文本
 // 初始化难度：先读本地存储，没有则默认 normal
 let ratingDifficulty = localStorage.getItem('milktea_rating_difficulty') || 'normal';
-/**
- * 将消息压入缓存，而不是直接发送
- * @param {string} text 消息内容
- */
+let unreadState = {
+    phone: false,      // 底部导航栏“查看手机”
+    forum: false,      // 手机内的“奶茶超话”
+    chats: new Set(),  // 手机内的“消息列表”，记录有新消息的 customerId
+    tasks: false,      // 奶茶委托
+    matches: false     // 奶茶比赛
+};
 function queueTavernMessage(text) {
     if (!text) return;
     tavernMessageBuffer.push(text);
@@ -6109,7 +6142,36 @@ async function flushTavernBuffer() {
         } else {
             nextDialog(); 
         }
+// 在 flushTavernBuffer 的 try 块内，解析完 aiRawResponse 后加入：
 
+const patchRegex = /<JSONPatch>([\s\S]*?)<\/JSONPatch>/i;
+const patchMatch = aiRawResponse.match(patchRegex);
+if (patchMatch) {
+    try {
+        const patches = JSON.parse(patchMatch[1].trim());
+        patches.forEach(p => {
+            const path = p.path;
+            // 1. 检测超话更新
+            if (path.startsWith("/phoneForumDB")) {
+                unreadState.forum = true;
+                unreadState.phone = true;
+            }
+            // 2. 检测私信更新 (例如: /phoneChatDB/江砚洲/history/-)
+            if (path.startsWith("/phoneChatDB")) {
+                const parts = path.split('/');
+                const charId = parts[2]; // 拿到 江砚洲
+                if (charId) unreadState.chats.add(charId);
+                unreadState.phone = true;
+            }
+            // 3. 检测委托和比赛 (可选)
+            if (path.startsWith("/phoneTaskDB")) { unreadState.tasks = true; unreadState.phone = true; }
+            if (path.startsWith("/phoneMatchDB")) { unreadState.matches = true; unreadState.phone = true; }
+        });
+        
+        // 立即刷新所有红点 UI
+        refreshNotificationDots();
+    } catch (e) { console.error("解析 Patch 红点失败", e); }
+}
     } catch (e) {
         console.error("❌ 同步失败:", e);
         isStoryFinished = false;
@@ -10533,8 +10595,12 @@ function createDefaultLayer(dbItem, z) {
 
         // 遍历对象
         Object.values(phoneChatDB).forEach((chat) => {
-          const item = document.createElement("div");
-          item.className = "chat-list-item";
+    const item = document.createElement("div");
+    item.className = "chat-list-item";
+    // 如果这个人的 ID 在 unreadState.chats 里，加红点
+    if (unreadState.chats.has(chat.id)) {
+        item.classList.add("has-dot");
+    }
           // 复用顾客档案里的头像路径
           const avatarPath = `${customerBaseUrl}${chat.id}.JPG`;
 
@@ -10554,6 +10620,8 @@ function createDefaultLayer(dbItem, z) {
       }
 
       function openSimChatDetail(id) {
+        unreadState.chats.delete(id); // 从集合中移除该联系人
+        refreshNotificationDots();  
         const chatData = phoneChatDB[id]; // 直接根据 ID 取对象
         currentChatId = id;
         if (!chatData) return;
@@ -10694,6 +10762,12 @@ function renderSimTaskList() {
         // 2. 处理奖励 (String 支持 |)
         const rewardHTML = task.reward.split('|').join('<br>');
         card.innerHTML = `
+
+                    <div onclick="event.stopPropagation(); dismissPhoneTask('${dbKey}')" 
+                 style="position:absolute; top:15px; right:15px; width:35px; height:35px; color:#ccc; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:10; font-size:20px;"
+                 onmouseover="this.style.color='#ff4757'" onmouseout="this.style.color='#ccc'">
+                <i class="fa-solid fa-xmark"></i>
+            </div>
             <div class="task-header">
                 <img src="${photoUrl}" class="task-photo" onerror="this.src='https://files.catbox.moe/gonxin.JPG'">
                 <div class="task-cust-info">
@@ -10905,7 +10979,14 @@ function renderSimMatchList() {
         const rewardHTML = match.reward.replace(/\|/g, '<br>');
 
           card.innerHTML = `
-   
+               <!-- 忽略这场比赛 -->
+            <div onclick="event.stopPropagation(); dismissPhoneMatch('${title}')" 
+                 style="position:absolute; top:15px; right:15px; width:35px; height:35px; color:#ccc; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:10; font-size:20px;"
+                 onmouseover="this.style.color='#ff4757'" onmouseout="this.style.color='#ccc'">
+                <i class="fa-solid fa-xmark"></i>
+            </div>
+
+            <div class="match-status-tag" style="background:#DEB887; color:white;">邀约中</div>
             <h3 class="match-title">${title}</h3>
             
 
@@ -12969,9 +13050,14 @@ ${post.replies.map(r => {
 const originalNavigateToPhone = navigateToPhone;
 window.navigateToPhone = function(pageId) {
     if (pageId === 'forum') {
-        currentForumPage = 1; // 重置页码
-        renderForumList();
+        unreadState.forum = false;
+    } else if (pageId === 'task') {
+        unreadState.tasks = false;
+    } else if (pageId === 'match') {
+        unreadState.matches = false;
     }
+    
+    refreshNotificationDots(); // 每次切换页面刷新红点
     originalNavigateToPhone(pageId);
 };
 
@@ -14169,6 +14255,59 @@ function stopLoadingState() {
     console.log(`🎲 随机灵感：选取了 ${actualCount} 种原料组合。`);
 
 
+}
+
+
+/**
+ * 忽略/移除这条委托邀约
+ */
+ async function dismissPhoneTask(taskId) {
+    // 只有一句简单的确认，防止手滑
+    if (confirm(`暂时不想理会来自 [${taskId}] 的委托吗？`)) {
+        delete phoneTaskDB[taskId];
+        renderSimTaskList();
+        await saveShopDataToMvu();
+    }
+}
+
+/**
+ * 无视这场比赛，从列表移除
+ */
+async function dismissPhoneMatch(matchTitle) {
+    if (confirm(`要把这场比赛从列表划掉吗？`)) {
+        delete phoneMatchDB[matchTitle];
+        renderSimMatchList();
+        await saveShopDataToMvu();
+    }
+}
+
+
+function refreshNotificationDots() {
+    // 1. 底部导航栏 - 查看手机 (第 5 个按钮)
+    const phoneBtn = document.querySelectorAll(".nav-button")[4];
+    if (phoneBtn) {
+        unreadState.phone ? phoneBtn.classList.add("has-dot") : phoneBtn.classList.remove("has-dot");
+    }
+
+    // 2. 手机主屏幕 App 图标
+    // 这里需要根据图标顺序或特征找到对应的 app-item
+    const apps = document.querySelectorAll(".app-item");
+    if (apps.length > 0) {
+        // 假设顺序：0消息, 1委托, 2比赛, 3点评, 4超话
+        const chatApp = apps[0];
+        const taskApp = apps[1];
+        const matchApp = apps[2];
+        const forumApp = apps[4];
+
+        unreadState.chats.size > 0 ? chatApp.classList.add("has-dot") : chatApp.classList.remove("has-dot");
+        unreadState.tasks ? taskApp.classList.add("has-dot") : taskApp.classList.remove("has-dot");
+        unreadState.matches ? matchApp.classList.add("has-dot") : matchApp.classList.remove("has-dot");
+        unreadState.forum ? forumApp.classList.add("has-dot") : forumApp.classList.remove("has-dot");
+    }
+    
+    // 3. 刷新手机主屏幕时，如果所有子项都没红点了，把 phone 状态也关掉
+    const hasAnyInnerDot = unreadState.forum || unreadState.tasks || unreadState.matches || unreadState.chats.size > 0;
+    if (!hasAnyInnerDot) unreadState.phone = false;
 }
 </script>
   </body>
