@@ -5465,7 +5465,7 @@
           <!-- 5. 查看手机 -->
           <button class="nav-button" onclick="openLayer('layer-phone')">
             <img src="https://files.catbox.moe/7nbo56.png" alt="查看手机" />
-            <span>查看手机</span>
+            <span>手机</span>
           </button>
         </div>
         <div id="sysAlertOverlay" class="sys-alert-overlay">
@@ -13935,97 +13935,80 @@ function toggleFullScreen() {
 
     let htmlBuffer = "";
     
-    // 4. 倒序遍历（最新的在前）
-    for (let i = assistantSumMsgs.length - 1; i >= 0; i--) {
-        const msgObj = assistantSumMsgs[i];
-        const mid = msgObj.message_id;
-        const summary = parseSumFromRaw(msgObj.message);
+// 在 renderArchiveList 循环内部
+for (let i = assistantSumMsgs.length - 1; i >= 0; i--) {
+    const msgObj = assistantSumMsgs[i];
+    const mid = msgObj.message_id;
+    const rawSummary = parseSumFromRaw(msgObj.message);
 
-        // 获取当前楼层的变量
-        const curMvu = Mvu.getMvuData({ type: 'message', message_id: mid });
-        const curSD = curMvu?.stat_data;
+    // 🔥 关键：对摘要进行安全转义，防止引号破坏 HTML 结构
+    const safeSummary = rawSummary
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 
-        let statsHtml = `<div style="color:#aaa; font-style:italic; font-size:14px; margin-top:10px;">该节点仅保存了对话，未记录经营数据</div>`;
-
-        if (curSD) {
-            // 5. 寻找“上一个带数据”的节点（用于比对中文名）
-            let prevSD = null;
-            // 在过滤后的数组中往回找
-            for (let j = i - 1; j >= 0; j--) {
-                const pMvu = Mvu.getMvuData({ type: 'message', message_id: assistantSumMsgs[j].message_id });
-                if (pMvu?.stat_data) {
-                    prevSD = pMvu.stat_data;
-                    break;
-                }
-            }
-
-            // --- 核心逻辑：按中文 [name] 比对新增 ---
-            const getNewNames = (curObj, prevObj) => {
-                if (!curObj) return [];
-                const curNames = Object.values(curObj).map(item => item.name).filter(Boolean);
-                const prevNames = prevObj ? Object.values(prevObj).map(item => item.name).filter(Boolean) : [];
-                return curNames.filter(n => !prevNames.includes(n));
-            };
-
-            const newIng = getNewNames(curSD.unlockedIngredients, prevSD?.unlockedIngredients);
-            const newCust = getNewNames(curSD.customersDB, prevSD?.customersDB);
-            // 配方库 Key 就是名字，直接对比 Key
-            const curRecs = Object.keys(curSD.shopMenu || {});
-            const prevRecs = prevSD ? Object.keys(prevSD.shopMenu || {}) : [];
-            const newRec = curRecs.filter(r => !prevRecs.includes(r));
-
-            statsHtml = `
-                <div style="display:grid; grid-template-columns:1fr; gap:5px; font-size:16px; color:#666; background:#fdfbf7; padding:12px; border-radius:12px; border:1px solid #eee; margin-top:10px;">
-                    <div style="display:flex; justify-content:space-between; font-weight:bold; margin-bottom:5px; color:#8b4513; border-bottom:1px solid #f5f5f0; padding-bottom:5px;">
-                        <span>💰 历史存款: ¥${curSD.shopFinancials?.currentBalance || 0}</span>
-                        <span style="color:#deb887; font-size:14px;">#${mid}</span>
-                    </div>
-                    <div><b style="color:#8fbc8f;">🍏 新原料:</b> ${newIng.length > 0 ? newIng.join('、') : '无'}</div>
-                    <div><b style="color:#deb887;">📖 新配方:</b> ${newRec.length > 0 ? newRec.join('、') : '无'}</div>
-                    <div><b style="color:#ff6b81;">👥 新顾客:</b> ${newCust.length > 0 ? newCust.join('、') : '无'}</div>
-                </div>
-            `;
+    // 获取数据逻辑保持回溯
+    let targetSD = null;
+    for (let sId = mid; sId >= Math.max(0, mid - 3); sId--) {
+        const mvu = Mvu.getMvuData({ type: 'message', message_id: sId });
+        if (mvu && mvu.stat_data && Object.keys(mvu.stat_data).length > 0) {
+            targetSD = mvu.stat_data;
+            break;
         }
-
-        // 6. 组装卡片
-        htmlBuffer += `
-            <div class="archive-card-item" onclick="confirmBranch(${mid}, '${summary.replace(/'/g, "\\'")}')"
-                 style="margin-bottom:20px; cursor:pointer; border:3px solid #deb887; padding:20px; background:#fff; border-radius:15px; box-shadow: 6px 6px 0 rgba(222,184,135,0.2); transition:0.2s;">
-                <div style="font-size:24px; font-weight:900; color:#333; line-height:1.4;">
-                    “ ${summary} ”
-                </div>
-                ${statsHtml}
-            </div>
-        `;
     }
 
+    // 渲染卡片：使用 safeSummary，并且不在属性里直接传长字符串
+    htmlBuffer += `
+        <div class="archive-card-item" 
+             onclick="confirmBranch(${mid}, '节点回溯')"
+             style="margin-bottom:20px; cursor:pointer; border:3px solid #deb887; padding:20px; background:#fff; border-radius:15px; box-shadow: 6px 6px 0 rgba(222,184,135,0.2); transition:0.2s;">
+            <div style="font-size:24px; font-weight:900; color:#333; line-height:1.4; margin-bottom:10px;">
+                “ ${safeSummary} ”
+            </div>
+            ${renderArchiveStats(targetSD, mid)}
+        </div>
+    `;
+}
     container.innerHTML = htmlBuffer;
     console.log(`✅ [深度扫描] 完成，找到 ${assistantSumMsgs.length} 个存档点`);
 }
+
+
 /**
- * 摘要解析：精准提取消息中“最后一对” <summary> 标签的内容
+ * 强化版摘要解析：只找消息末尾、真正有效的最后一对标签
  */
  function parseSumFromRaw(text) {
     if (!text) return "未命名的剧情点";
 
-    // 1. 使用全局匹配模式 'g' 寻找所有 summary 块
-    const regex = /<summary>([\s\S]*?)<\/summary>/gi;
-    const matches = Array.from(text.matchAll(regex));
+    // 1. 优先剔除可能干扰正则的 <think> 思考块
+    const cleanText = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
 
-    // 2. 如果找到了匹配项
+    // 2. 匹配所有的 summary 块
+    const regex = /<summary>([\s\S]*?)<\/summary>/gi;
+    const matches = Array.from(cleanText.matchAll(regex));
+
     if (matches.length > 0) {
-        // [matches.length - 1] 确保拿取的是最后生成的那一个
-        // [1] 是正则表达式捕获组括号里的内容（即摘要正文）
+        // 3. 拿到最后一个匹配项
         let finalSummary = matches[matches.length - 1][1].trim();
         
-        // 额外清理：剔除可能残留的 HTML 注释
+        // 4. 清理冗余：去掉 HTML 注释和可能误入的 JSON 标签
         finalSummary = finalSummary.replace(/<!--[\s\S]*?-->/g, "");
+        finalSummary = finalSummary.replace(/<dialogtext>[\s\S]*?<\/dialogtext>/gi, "");
+        
+        // 5. 长度截断：防止摘要过长撑爆界面
+        if (finalSummary.length > 200) {
+            finalSummary = finalSummary.substring(0, 200) + "...";
+        }
         
         return finalSummary;
     }
 
     return "未命名的剧情点";
 }
+
+
 function confirmBranch(mid, summary) {
     if (confirm(`🕰️ 确定要回溯到此时间点吗？\n\n"${summary}"\n\n注意：这会创建一个新的对话分支。`)) {
         TavernHelper.executeCommand(`/branch-create ${mid}`);
