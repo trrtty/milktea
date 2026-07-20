@@ -9157,10 +9157,7 @@ container.style.paddingBottom = "150px";
         refreshRecipeList(); // 刷新数据
       }
 
-/**
- * 渲染今日主推 (完全体大海报版)
- */
- function updateShowcaseDisplay() {
+      function updateShowcaseDisplay() {
     const canvas = document.getElementById("showcase-canvas");
     const nameEl = document.getElementById("showcase-name");
     const priceEl = document.getElementById("showcase-price");
@@ -9168,7 +9165,6 @@ container.style.paddingBottom = "150px";
     const incomeEl = document.getElementById("showcase-income");
     const dateEl = document.getElementById("showcase-date");
     
-    // 新增元素
     const tagsEl = document.getElementById("showcase-tags");
     const ingListEl = document.getElementById("showcase-ingredients-list");
     const ratingNumEl = document.getElementById("showcase-rating-num");
@@ -9184,49 +9180,54 @@ container.style.paddingBottom = "150px";
     const item = shopMenu[currentShowcaseKey];
 
     if (!item) {
-        // ... 原有的暂无商品显示逻辑 ...
+        nameEl.innerText = "暂无主推商品";
         return;
     }
 
     // 1. 填充基础信息
-    nameEl.innerText = item.name;
-    priceEl.innerText = item.price;
+    nameEl.innerText = item.name || "未命名饮品";
+    priceEl.innerText = item.price || 0;
     salesEl.innerText = item.sales || 0;
-    incomeEl.innerText = (item.sales * item.price).toLocaleString();
-    dateEl.innerText = "SINCE: " + (item.createdAt ? item.createdAt.split(' ')[0].replace(/-/g, '.') : '2026.01.23');
+    incomeEl.innerText = ((item.sales || 0) * (item.price || 0)).toLocaleString();
 
     // 2. 渲染星级
-    ratingNumEl.innerText = item.finalRating.toFixed(1);
-    const fullStars = Math.floor(item.finalRating);
+    const rate = item.finalRating || 0;
+    ratingNumEl.innerText = Number(rate).toFixed(1);
+    const fullStars = Math.floor(rate);
     ratingStarsEl.innerText = "★".repeat(fullStars) + "☆".repeat(5 - fullStars);
 
-    // 3. 渲染标签云
-    tagsEl.innerHTML = (item.tags || ["招牌", "人气"]).map(t => 
-        `<span class="px-2 py-0.5 bg-white/20 rounded text-[10px] font-bold">#${t}</span>`
+    // 3. 渲染标签云 (字号从 10px 调大)
+    tagsEl.innerHTML = (item.tags || ["手作", "人气"]).map(t => 
+        `<span class="px-4 py-1 bg-white/20 rounded-full text-xl font-black border border-white/30"># ${t}</span>`
     ).join("");
 
-    // 4. 渲染原料气泡 (Poster Detail)
-    ingListEl.innerHTML = (item.ingredients || []).map(ing => `
-        <div class="px-4 py-2 bg-white rounded-full text-[#8B4513] text-sm font-black shadow-sm border border-[#F5DEB3]">
+    // 4. 渲染原料构成 (修复为空的问题：增加 ingredients 字段兼容性检测)
+    const ingredients = item.ingredients || item.Components || ["基础原材"];
+    ingListEl.innerHTML = ingredients.map(ing => `
+        <div class="px-5 py-2 bg-white rounded-full text-[#8B4513] text-xl font-black shadow-sm border-2 border-[#F5DEB3]">
             ${ing}
         </div>
     `).join("");
 
-    // 5. 动画同步风味条
+    // 5. 动画同步风味条 (修复数值为空的问题)
     setTimeout(() => {
-        const refreshPct = Math.min(100, (item.refreshingScore / 20) * 100);
-        const mellowPct = Math.min(100, (item.mellowScore / 20) * 100);
-        barRefresh.style.width = refreshPct + "%";
-        barMellow.style.width = mellowPct + "%";
-        valRefresh.innerText = item.refreshingScore;
-        valMellow.innerText = item.mellowScore;
+        const sA = item.refreshingScore || item.sumA || 0;
+        const sB = item.mellowScore || item.sumB || 0;
+        
+        // 计算百分比，假设最高 20 分
+        const refreshPct = Math.min(100, (sA / 20) * 100);
+        const mellowPct = Math.min(100, (sB / 20) * 100);
+        
+        if(barRefresh) barRefresh.style.width = refreshPct + "%";
+        if(barMellow) barMellow.style.width = mellowPct + "%";
+        if(valRefresh) valRefresh.innerText = sA;
+        if(valMellow) valMellow.innerText = sB;
     }, 100);
 
-    // 6. 渲染 650px 画布内容
+    // 6. 渲染预览图
     const scale = canvas.clientWidth / 650;
     renderThumbnailFromCode(canvas, item.code, scale, false);
 }
-
 // 辅助滤镜函数 (简化版，只用于展示，不可编辑)
       function applyShowcaseFilter(img, layer) {
         let filterStr = `opacity(${layer.opacity}%) brightness(${layer.brightness}%) contrast(${layer.contrast}%) `;
