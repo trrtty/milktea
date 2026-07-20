@@ -4569,80 +4569,133 @@
           </div>
 
           <div class="flex-1 relative overflow-hidden">
-            <!-- === Level 1: 展台页 (默认显示) === -->
-            <div
-              id="menu-level-1"
-              class="absolute inset-0 flex flex-col items-center p-6 overflow-y-auto transition-transform duration-300"
-            >
-              <!-- 1. 镇店之宝展示区 (动态画布) -->
-              <div class="w-full max-w-[620px] mb-8">
-                <div
-                  class="bg-white rounded-3xl shadow-xl border-4 border-[#F5DEB3] p-6 relative overflow-hidden"
-                >
-                  <div
-                    class="absolute top-4 left-4 bg-[#8B4513] text-white px-3 py-1 rounded-full text-sm font-bold z-10"
-                  >
-                    ✨ 今日主推
-                  </div>
+<!-- === Level 1: 今日主推 (高级大热销海报版) === -->
+<div id="menu-level-1" class="absolute inset-0 bg-[#FDFBF7] flex flex-col p-6 overflow-y-auto">
+    
+  <!-- 背景装饰图层 (绝对定位) -->
+  <div class="absolute top-20 right-0 opacity-[0.02] pointer-events-none text-[150px] font-black rotate-12">MILK TEA</div>
+  <div class="absolute bottom-40 left-0 opacity-[0.02] pointer-events-none text-[150px] font-black -rotate-12">PREMIUM</div>
 
-                  <!-- 这里用一个小型画布来实时渲染当前主推的奶茶 -->
-                  <div
-                    id="showcase-canvas"
-                    class="w-full aspect-square relative bg-[#FFF8DC]/30 rounded-xl overflow-hidden"
-                  >
-                    <!-- JS将在这里生成图层 -->
-                    <div
-                      class="flex items-center justify-center h-full text-[#DEB887] font-bold"
-                    >
-                      (暂无主推，请去配方库选择)
-                    </div>
-                  </div>
+  <!-- 1. 顶部海报刊头 -->
+  <div class="relative w-full mb-8 pt-4">
+      <div class="flex justify-between items-end px-2">
+          <div class="text-left">
+              <div class="text-[#8B4513] font-black text-2xl tracking-tighter opacity-80 uppercase">Premium Selection</div>
+              <h2 class="text-6xl font-black text-[#8B4513] italic -mt-2">TODAY'S <span class="text-[#ff6b81]">HERO</span></h2>
+          </div>
+          <div class="text-right pb-1">
+              <div id="showcase-date" class="text-[#8B4513] font-mono font-bold text-lg opacity-40 italic">DATE: 2026.01.23</div>
+              <div class="h-1.5 w-24 bg-[#ff6b81] ml-auto rounded-full"></div>
+          </div>
+      </div>
+  </div>
 
-                  <div class="mt-4 text-center">
-                    <h2
-                      id="showcase-name"
-                      class="text-3xl font-black text-[#8B4513]"
-                    >
-                      暂无商品
-                    </h2>
-                    <p class="text-gray-400 text-sm mt-1">
-                      快去配方库把新品摆上来吧！
-                    </p>
-                  </div>
-                </div>
+  <!-- 2. 海报核心区域 (左图右文) -->
+  <div class="w-full flex gap-6 items-stretch mb-8">
+      <!-- 左侧：展示台与勋章 -->
+      <div class="flex-[1.2] relative">
+          <!-- 浮动勋章组 -->
+          <div class="absolute -top-4 -left-4 z-20 space-y-2">
+              <div class="w-24 h-24 bg-[#ff6b81] rounded-full flex flex-col items-center justify-center text-white font-black shadow-xl transform -rotate-12 border-4 border-white">
+                  <span class="text-xs">TOP RANK</span>
+                  <span class="text-xl">BEST</span>
+                  <span class="text-xs">SELLER</span>
               </div>
-
-              <!-- 2. 数据统计卡片 -->
-              <div class="w-full max-w-[620px] grid grid-cols-2 gap-4">
-                <div
-                  class="bg-white p-5 rounded-2xl shadow-sm border border-[#EEE]"
-                >
-                  <div class="text-gray-500 text-sm mb-1">单杯售价</div>
-                  <div class="text-2xl font-bold text-[#D2691E]">
-                    ¥ <span id="showcase-price">0</span>
-                  </div>
-                </div>
-                <div
-                  class="bg-white p-5 rounded-2xl shadow-sm border border-[#EEE]"
-                >
-                  <div class="text-gray-500 text-sm mb-1">累计销量</div>
-                  <div class="text-2xl font-bold text-[#556B2F]">
-                    <span id="showcase-sales">0</span> 杯
-                  </div>
-                </div>
-                <div
-                  class="col-span-2 bg-[#FFF8DC] p-5 rounded-2xl border border-[#DEB887] flex justify-between items-center"
-                >
-                  <div>
-                    <div class="text-[#8B4513] font-bold text-lg">总计收入</div>
-                    <div class="text-xs text-[#8B4513]/60">包含外卖与堂食</div>
-                  </div>
-                  <div class="text-3xl font-black text-[#8B4513]">
-                    ¥ <span id="showcase-income">0</span>
-                  </div>
-                </div>
+              <div id="badge-limited" class="w-20 h-8 bg-[#8B4513] text-white rounded-full flex items-center justify-center text-xs font-black shadow-lg transform rotate-6 border-2 border-white">
+                  LIMITED
               </div>
-            </div>
+          </div>
+          
+          <!-- 主画布容器 -->
+          <div class="bg-white rounded-[60px] shadow-2xl p-4 border-8 border-[#F5DEB3] relative overflow-hidden h-full flex items-center justify-center min-h-[480px]">
+              <div class="absolute inset-0 opacity-[0.03] pointer-events-none" style="background-image: radial-gradient(#000 20%, transparent 20%); background-size: 20px 20px;"></div>
+              <div id="showcase-canvas" class="w-full h-full relative z-10"></div>
+          </div>
+      </div>
+
+      <!-- 右侧：核心档、价格、评分 -->
+      <div class="flex-1 flex flex-col gap-4">
+          <!-- 名字卡片 (反色设计) -->
+          <div class="bg-[#8B4513] text-white p-6 rounded-[40px] shadow-xl relative overflow-hidden">
+              <div class="text-[10px] opacity-40 uppercase font-black tracking-[0.2em] mb-1">Authentic Flavor</div>
+              <h3 id="showcase-name" class="text-4xl font-black leading-tight mb-2">暂无商品</h3>
+              <div id="showcase-tags" class="flex flex-wrap gap-1 opacity-80">
+                  <!-- JS 生成标签 -->
+              </div>
+              <div class="absolute top-0 right-0 text-8xl font-black text-white/5 pointer-events-none">#1</div>
+          </div>
+
+          <!-- 价格与评分 -->
+          <div class="grid grid-cols-1 gap-4">
+              <!-- 价格 -->
+              <div class="bg-white border-4 border-[#F5DEB3] p-5 rounded-[40px] shadow-sm flex flex-col items-center">
+                  <span class="text-[#8B4513] font-black text-xs opacity-50">UNIT PRICE</span>
+                  <span class="text-5xl font-black text-[#ff6b81]">¥<span id="showcase-price">0</span></span>
+              </div>
+              <!-- 评分勋章 -->
+              <div class="bg-white border-4 border-[#F5DEB3] p-4 rounded-[40px] shadow-sm text-center">
+                  <div class="text-[#8B4513] font-black text-xs opacity-50 mb-1">RATING SCORE</div>
+                  <div id="showcase-rating-stars" class="text-2xl mb-1 tracking-widest text-[#ffb400]">★★★★★</div>
+                  <div class="text-[#8B4513] font-black text-2xl font-mono"><span id="showcase-rating-num">0.0</span> <small class="text-xs">/ 5.0</small></div>
+              </div>
+          </div>
+      </div>
+  </div>
+
+  <!-- 3. 中部：原料图鉴预览 (增加丰富度) -->
+  <div class="w-full bg-[#FFF8DC]/50 border-2 border-dashed border-[#DEB887] rounded-[45px] p-6 mb-8 flex flex-col">
+      <div class="text-[#8B4513] font-black text-sm mb-4 flex items-center gap-2">
+          <span class="w-8 h-0.5 bg-[#8B4513]"></span>
+          INGREDIENTS ANALYSIS / 原料构成
+      </div>
+      <div id="showcase-ingredients-list" class="flex flex-wrap gap-3">
+          <!-- JS 生成原料气泡 -->
+      </div>
+  </div>
+
+  <!-- 4. 底部：风味雷达与运营仪表盘 -->
+  <div class="w-full grid grid-cols-2 gap-6 pb-10">
+      <!-- 左：风味倾向 -->
+      <div class="bg-white p-6 rounded-[45px] shadow-sm border border-gray-100">
+          <div class="text-[#8B4513] font-black text-sm mb-4 uppercase italic">Taste Profile</div>
+          <div class="space-y-4">
+              <div>
+                  <div class="flex justify-between items-center text-xs font-black text-[#8B4513] mb-1.5">
+                      <span>REFRESHING / 清爽</span><span id="meter-refresh">0</span>
+                  </div>
+                  <div class="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                      <div id="bar-refresh" class="h-full bg-gradient-to-right from-[#8FBC8F] to-[#556B2F]" style="width: 0%; transition: 1s;"></div>
+                  </div>
+              </div>
+              <div>
+                  <div class="flex justify-between items-center text-xs font-black text-[#8B4513] mb-1.5">
+                      <span>MELLOW / 醇厚</span><span id="meter-mellow">0</span>
+                  </div>
+                  <div class="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                      <div id="bar-mellow" class="h-full bg-gradient-to-right from-[#F4A460] to-[#D2691E]" style="width: 0%; transition: 1s;"></div>
+                  </div>
+              </div>
+          </div>
+      </div>
+
+      <!-- 右：运营数据 -->
+      <div class="bg-[#FFF8DC] p-6 rounded-[45px] border-4 border-white shadow-xl flex flex-col justify-between">
+          <div class="flex flex-col gap-2">
+              <div class="flex justify-between">
+                  <span class="text-xs font-bold text-[#8B4513]/60">Total Sales</span>
+                  <span class="text-xs font-bold text-[#8B4513]/60">Income</span>
+              </div>
+              <div class="flex justify-between items-baseline">
+                  <span class="text-3xl font-black text-[#8B4513]"><span id="showcase-sales">0</span> <small class="text-xs">pcs</small></span>
+                  <span class="text-3xl font-black text-[#D2691E]">¥<span id="showcase-income">0</span></span>
+              </div>
+          </div>
+          <button onclick="switchMenuLevel(2)" class="w-full bg-[#8B4513] text-white py-3 rounded-full font-black text-lg shadow-lg active:scale-95 transition-all hover:bg-black mt-4">
+              BROWSE RECIPES / 进入配方库
+          </button>
+      </div>
+  </div>
+</div>
 
             <!-- === Level 2: 配方库 (默认隐藏) === -->
             <!-- === Level 2: 配方库 (内部结构更新) === -->
@@ -6668,10 +6721,7 @@ function showItemPopup(name, imgSrc, variantData, customTitle) {
         document.getElementById("itemOverlay").style.display = "none";
       }
 
-      // --- 修改后的研发逻辑 ---
 
-      // 1. 原料数据库
-      /* --- 核心数据库：图床文件对应版 --- */
       const ingredientsDB = [
         // 1. 基础结构
         {
@@ -9230,42 +9280,77 @@ container.style.paddingBottom = "150px";
         refreshRecipeList(); // 刷新数据
       }
 
-      // 4. 渲染展台 (已修复染色问题)
-      function updateShowcaseDisplay() {
+/**
+ * 渲染今日主推 (完全体大海报版)
+ */
+ function updateShowcaseDisplay() {
     const canvas = document.getElementById("showcase-canvas");
     const nameEl = document.getElementById("showcase-name");
     const priceEl = document.getElementById("showcase-price");
     const salesEl = document.getElementById("showcase-sales");
     const incomeEl = document.getElementById("showcase-income");
+    const dateEl = document.getElementById("showcase-date");
+    
+    // 新增元素
+    const tagsEl = document.getElementById("showcase-tags");
+    const ingListEl = document.getElementById("showcase-ingredients-list");
+    const ratingNumEl = document.getElementById("showcase-rating-num");
+    const ratingStarsEl = document.getElementById("showcase-rating-stars");
+    const barRefresh = document.getElementById("bar-refresh");
+    const barMellow = document.getElementById("bar-mellow");
+    const valRefresh = document.getElementById("meter-refresh");
+    const valMellow = document.getElementById("meter-mellow");
 
     if (!canvas) return;
 
-    // 1. 获取当前主推的数据对象
+    // 获取当前主推数据
     const item = shopMenu[currentShowcaseKey];
 
     if (!item) {
-        nameEl.innerText = "暂无主推";
-        priceEl.innerText = "0";
-        salesEl.innerText = "0";
-        incomeEl.innerText = "0";
-        canvas.innerHTML = '<div class="flex items-center justify-center h-full text-[#DEB887] font-bold">(暂无商品)</div>';
+        // ... 原有的暂无商品显示逻辑 ...
         return;
     }
 
-    // 2. 更新文字信息
+    // 1. 填充基础信息
     nameEl.innerText = item.name;
     priceEl.innerText = item.price;
-    const sales = item.sales || 0;
-    salesEl.innerText = sales;
-    incomeEl.innerText = sales * item.price;
+    salesEl.innerText = item.sales || 0;
+    incomeEl.innerText = (item.sales * item.price).toLocaleString();
+    dateEl.innerText = "SINCE: " + (item.createdAt ? item.createdAt.split(' ')[0].replace(/-/g, '.') : '2026.01.23');
 
-    // 3. 【关键修改】统一调用已修复的渲染引擎
-    // 第三个参数是缩放比例 (展台容器宽度 / 650)
-    // 第四个参数是 false，表示“不跳过背景”
+    // 2. 渲染星级
+    ratingNumEl.innerText = item.finalRating.toFixed(1);
+    const fullStars = Math.floor(item.finalRating);
+    ratingStarsEl.innerText = "★".repeat(fullStars) + "☆".repeat(5 - fullStars);
+
+    // 3. 渲染标签云
+    tagsEl.innerHTML = (item.tags || ["招牌", "人气"]).map(t => 
+        `<span class="px-2 py-0.5 bg-white/20 rounded text-[10px] font-bold">#${t}</span>`
+    ).join("");
+
+    // 4. 渲染原料气泡 (Poster Detail)
+    ingListEl.innerHTML = (item.ingredients || []).map(ing => `
+        <div class="px-4 py-2 bg-white rounded-full text-[#8B4513] text-sm font-black shadow-sm border border-[#F5DEB3]">
+            ${ing}
+        </div>
+    `).join("");
+
+    // 5. 动画同步风味条
+    setTimeout(() => {
+        const refreshPct = Math.min(100, (item.refreshingScore / 20) * 100);
+        const mellowPct = Math.min(100, (item.mellowScore / 20) * 100);
+        barRefresh.style.width = refreshPct + "%";
+        barMellow.style.width = mellowPct + "%";
+        valRefresh.innerText = item.refreshingScore;
+        valMellow.innerText = item.mellowScore;
+    }, 100);
+
+    // 6. 渲染 650px 画布内容
     const scale = canvas.clientWidth / 650;
     renderThumbnailFromCode(canvas, item.code, scale, false);
-}  
-      // 辅助滤镜函数 (简化版，只用于展示，不可编辑)
+}
+
+// 辅助滤镜函数 (简化版，只用于展示，不可编辑)
       function applyShowcaseFilter(img, layer) {
         let filterStr = `opacity(${layer.opacity}%) brightness(${layer.brightness}%) contrast(${layer.contrast}%) `;
         if (layer.tintColor) {
@@ -10931,25 +11016,30 @@ async function confirmTaskSubmission() {
 
     // 2. 分支处理：参加比赛
     if (isParticipatingMatch) {
+      
         const matchData = phoneMatchDB[currentMatchId];
         if (matchData) {
+                      // 1. 生成难度星级字符串 (如：★★★☆☆)
+                      const difficulty = matchData.difficulty || 0;
+            const diffStars = "★".repeat(Math.floor(difficulty)) + "☆".repeat(5 - Math.floor(difficulty));
             // 解析评委真实姓名
             const judgeNames = matchData.judges.map(id => customersDB[id] ? customersDB[id].name : id).join("、");
 
             // --- 【核心增强：构建详尽的比赛信息】 ---
             chatMsg = `【提交参赛作品】
+我的参赛作品：【${selectedTaskDrinkKey}】
 赛事名称：${currentMatchId}
+<thorough>
 赛事简介：${matchData.desc}
+赛事难度：${diffStars} (${difficulty}星)
 参赛要求：${matchData.requirement}
 评审团：${judgeNames}
 最终奖励：${matchData.reward}
-
-我的参赛作品：【${selectedTaskDrinkKey}】
 作品描述：${drinkData.desc || "店长秘制特调"}
 作品属性：品质${drinkData.qualityStars}星 / 口感${drinkData.tasteStars}星 / 综合${drinkData.finalRating}分
 风味倾向：清爽度(${drinkData.refreshingScore}) / 醇厚度(${drinkData.mellowScore})
-
-请评审团根据以上作品表现与赛事要求的匹配程度，给出专业评审结果。`;
+请评审团根据以上作品表现与赛事要求的匹配程度，给出专业评审结果。
+</thorough>`;
 
             // 管理场景队列
             if (!appSettings.pendingScenes) appSettings.pendingScenes = [];
@@ -10972,14 +11062,14 @@ async function confirmTaskSubmission() {
         if (taskData) {
             chatMsg = `【交付奶茶委托】
 委托人：${taskData.name}
+提交饮品：【${selectedTaskDrinkKey}】
 背景故事：${taskData.backstory}
+<thorough>
 顾客要求：${taskData.constraints.join(' | ')}
 预期奖励：${taskData.reward}
-
-提交饮品：【${selectedTaskDrinkKey}】
 饮品表现：品质${drinkData.qualityStars}星 / 口感${drinkData.tasteStars}星
-
-请顾客根据饮品是否满足要求给出评价。`;
+请顾客根据饮品是否满足要求给出评价。
+</thorough>`;
 
             delete phoneTaskDB[currentChatId];
         }
