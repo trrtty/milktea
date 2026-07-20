@@ -4570,7 +4570,7 @@
 
           <div class="flex-1 relative overflow-hidden">
 <!-- === Level 1: 今日主推 (高级大热销海报版) === -->
-<div id="menu-level-1" class="absolute inset-0 bg-[#FDFBF7] flex flex-col p-6 overflow-y-auto">
+<div id="menu-level-1" class="absolute inset-0 bg-[#FDFBF7] flex flex-col p-6 overflow-y-auto overflow-x-hidden max-w-full">
     
   <!-- 背景装饰图层 (绝对定位) -->
   <div class="absolute top-20 right-0 opacity-[0.02] pointer-events-none text-[150px] font-black rotate-12">MILK TEA</div>
@@ -4583,75 +4583,77 @@
               <div class="text-[#8B4513] font-black text-2xl tracking-tighter opacity-80 uppercase">Premium Selection</div>
               <h2 class="text-6xl font-black text-[#8B4513] italic -mt-2">TODAY'S <span class="text-[#ff6b81]">HERO</span></h2>
           </div>
-          <div class="text-right pb-1">
-              <div id="showcase-date" class="text-[#8B4513] font-mono font-bold text-lg opacity-40 italic">DATE: 2026.01.23</div>
-              <div class="h-1.5 w-24 bg-[#ff6b81] ml-auto rounded-full"></div>
-          </div>
+
       </div>
   </div>
 
-  <!-- 2. 海报核心区域 (左图右文) -->
-  <div class="w-full flex gap-6 items-stretch mb-8">
-      <!-- 左侧：展示台与勋章 -->
-      <div class="flex-[1.2] relative">
-          <!-- 浮动勋章组 -->
-          <div class="absolute -top-4 -left-4 z-20 space-y-2">
-              <div class="w-24 h-24 bg-[#ff6b81] rounded-full flex flex-col items-center justify-center text-white font-black shadow-xl transform -rotate-12 border-4 border-white">
-                  <span class="text-xs">TOP RANK</span>
-                  <span class="text-xl">BEST</span>
-                  <span class="text-xs">SELLER</span>
-              </div>
-              <div id="badge-limited" class="w-20 h-8 bg-[#8B4513] text-white rounded-full flex items-center justify-center text-xs font-black shadow-lg transform rotate-6 border-2 border-white">
-                  LIMITED
-              </div>
+<!-- 2. 海报核心区域 (上图下文版) -->
+<div class="w-full flex flex-col gap-4 mb-8">
+  <!-- 上部：展示台与勋章 (大图区) -->
+  <div class="relative w-full">
+      <!-- 浮动勋章组 -->
+      <div class="absolute -top-4 -left-4 z-20 flex flex-row gap-2">
+          <div class="w-20 h-20 bg-[#ff6b81] rounded-full flex flex-col items-center justify-center text-white font-black shadow-xl transform -rotate-12 border-4 border-white">
+              <span class="text-[10px]">RANK</span>
+              <span class="text-lg">BEST</span>
           </div>
-          
-          <!-- 主画布容器 -->
-          <div class="bg-white rounded-[60px] shadow-2xl p-4 border-8 border-[#F5DEB3] relative overflow-hidden h-full flex items-center justify-center min-h-[480px]">
-              <div class="absolute inset-0 opacity-[0.03] pointer-events-none" style="background-image: radial-gradient(#000 20%, transparent 20%); background-size: 20px 20px;"></div>
-              <div id="showcase-canvas" class="w-full h-full relative z-10"></div>
+          <div id="badge-limited" class="w-20 h-8 mt-6 bg-[#8B4513] text-white rounded-full flex items-center justify-center text-xs font-black shadow-lg transform rotate-6 border-2 border-white">
+              LIMITED
           </div>
       </div>
-
-      <!-- 右侧：核心档、价格、评分 -->
-      <div class="flex-1 flex flex-col gap-4">
-          <!-- 名字卡片 (反色设计) -->
-          <div class="bg-[#8B4513] text-white p-6 rounded-[40px] shadow-xl relative overflow-hidden">
-              <div class="text-[10px] opacity-40 uppercase font-black tracking-[0.2em] mb-1">Authentic Flavor</div>
-              <h3 id="showcase-name" class="text-4xl font-black leading-tight mb-2">暂无商品</h3>
-              <div id="showcase-tags" class="flex flex-wrap gap-1 opacity-80">
-                  <!-- JS 生成标签 -->
-              </div>
-              <div class="absolute top-0 right-0 text-8xl font-black text-white/5 pointer-events-none">#1</div>
-          </div>
-
-          <!-- 价格与评分 -->
-          <div class="grid grid-cols-1 gap-4">
-              <!-- 价格 -->
-              <div class="bg-white border-4 border-[#F5DEB3] p-5 rounded-[40px] shadow-sm flex flex-col items-center">
-                  <span class="text-[#8B4513] font-black text-xs opacity-50">UNIT PRICE</span>
-                  <span class="text-5xl font-black text-[#ff6b81]">¥<span id="showcase-price">0</span></span>
-              </div>
-              <!-- 评分勋章 -->
-              <div class="bg-white border-4 border-[#F5DEB3] p-4 rounded-[40px] shadow-sm text-center">
-                  <div class="text-[#8B4513] font-black text-xs opacity-50 mb-1">RATING SCORE</div>
-                  <div id="showcase-rating-stars" class="text-2xl mb-1 tracking-widest text-[#ffb400]">★★★★★</div>
-                  <div class="text-[#8B4513] font-black text-2xl font-mono"><span id="showcase-rating-num">0.0</span> <small class="text-xs">/ 5.0</small></div>
-              </div>
-          </div>
+      
+      <!-- 主画布容器：固定比例或高度 -->
+      <div class="bg-white rounded-[60px] shadow-2xl p-4 border-8 border-[#F5DEB3] relative overflow-hidden flex items-center justify-center min-h-[500px]">
+          <div class="absolute inset-0 opacity-[0.03] pointer-events-none" style="background-image: radial-gradient(#000 20%, transparent 20%); background-size: 20px 20px;"></div>
+          <!-- 这里是奶茶杯子渲染区 -->
+          <div id="showcase-canvas" class="w-full h-full relative z-10" style="aspect-ratio: 1/1;"></div>
       </div>
   </div>
 
-  <!-- 3. 中部：原料图鉴预览 (增加丰富度) -->
-  <div class="w-full bg-[#FFF8DC]/50 border-2 border-dashed border-[#DEB887] rounded-[45px] p-6 mb-8 flex flex-col">
-      <div class="text-[#8B4513] font-black text-sm mb-4 flex items-center gap-2">
-          <span class="w-8 h-0.5 bg-[#8B4513]"></span>
-          INGREDIENTS ANALYSIS / 原料构成
+  <!-- 下部：文字信息区 (分为左右两栏或堆叠) -->
+  <div class="w-full flex flex-col gap-3">
+      <!-- 名字与标签卡片 (深色长条) -->
+      <div class="bg-[#8B4513] text-white p-6 rounded-[40px] shadow-xl relative overflow-hidden">
+          <div class="flex justify-between items-center">
+              <div>
+                  <div class="text-[10px] opacity-40 uppercase font-black tracking-[0.2em] mb-1">Premium Selection</div>
+                  <h3 id="showcase-name" class="text-4xl font-black leading-tight">暂无商品</h3>
+              </div>
+              <!-- 右侧装饰数字 -->
+              <div class="text-5xl font-black opacity-10 italic">#01</div>
+          </div>
+          <div id="showcase-tags" class="flex flex-wrap gap-2 mt-3 opacity-90">
+              <!-- JS 生成标签 -->
+          </div>
       </div>
-      <div id="showcase-ingredients-list" class="flex flex-wrap gap-3">
-          <!-- JS 生成原料气泡 -->
+
+      <!-- 价格与评分 (并排两格) -->
+      <div class="grid grid-cols-2 gap-3">
+          <!-- 价格格 -->
+          <div class="bg-white border-4 border-[#F5DEB3] p-4 rounded-[40px] shadow-sm flex flex-col items-center justify-center">
+              <span class="text-[#8B4513] font-black text-[10px] opacity-50">PRICE</span>
+              <span class="text-4xl font-black text-[#ff6b81]">¥<span id="showcase-price">0</span></span>
+          </div>
+          <!-- 评分格 -->
+          <div class="bg-white border-4 border-[#F5DEB3] p-3 rounded-[40px] shadow-sm text-center flex flex-col items-center justify-center">
+              <div id="showcase-rating-stars" class="text-xl mb-1 tracking-tighter text-[#ffb400]">★★★★★</div>
+              <div class="text-[#8B4513] font-black text-xl font-mono"><span id="showcase-rating-num">0.0</span> <small class="text-[10px]">/ 5.0</small></div>
+          </div>
       </div>
   </div>
+</div>
+
+<!-- 3. 中部：原料图鉴预览 (适配宽度精修版) -->
+<div class="mx-auto w-[94%] bg-[#FFF8DC]/50 border-2 border-dashed border-[#DEB887] rounded-[35px] p-5 mb-8 flex flex-col box-border overflow-hidden">
+  <div class="text-[#8B4513] font-black text-xs mb-3 flex items-center gap-2">
+      <span class="w-6 h-0.5 bg-[#8B4513] opacity-50"></span>
+      <span class="tracking-widest">原料构成</span>
+  </div>
+  <!-- 使用 flex-wrap 自动换行，且 gap 稍作缩小防止撑开 -->
+  <div id="showcase-ingredients-list" class="flex flex-wrap gap-2 justify-start">
+      <!-- JS 生成原料气泡 -->
+  </div>
+</div>
 
   <!-- 4. 底部：风味雷达与运营仪表盘 -->
   <div class="w-full grid grid-cols-2 gap-6 pb-10">
@@ -4661,7 +4663,7 @@
           <div class="space-y-4">
               <div>
                   <div class="flex justify-between items-center text-xs font-black text-[#8B4513] mb-1.5">
-                      <span>REFRESHING / 清爽</span><span id="meter-refresh">0</span>
+                      <span>清爽</span><span id="meter-refresh">0</span>
                   </div>
                   <div class="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
                       <div id="bar-refresh" class="h-full bg-gradient-to-right from-[#8FBC8F] to-[#556B2F]" style="width: 0%; transition: 1s;"></div>
@@ -4669,7 +4671,7 @@
               </div>
               <div>
                   <div class="flex justify-between items-center text-xs font-black text-[#8B4513] mb-1.5">
-                      <span>MELLOW / 醇厚</span><span id="meter-mellow">0</span>
+                      <span>醇厚</span><span id="meter-mellow">0</span>
                   </div>
                   <div class="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
                       <div id="bar-mellow" class="h-full bg-gradient-to-right from-[#F4A460] to-[#D2691E]" style="width: 0%; transition: 1s;"></div>
@@ -4691,7 +4693,7 @@
               </div>
           </div>
           <button onclick="switchMenuLevel(2)" class="w-full bg-[#8B4513] text-white py-3 rounded-full font-black text-lg shadow-lg active:scale-95 transition-all hover:bg-black mt-4">
-              BROWSE RECIPES / 进入配方库
+              进入配方库
           </button>
       </div>
   </div>
